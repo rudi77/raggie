@@ -1,0 +1,53 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "RAG CLI",
+            "type": "python",
+            "request": "launch",
+            "module": "rag.cli.main",
+            "args": ["--help"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "RAG CLI Ingest",
+            "type": "python",
+            "request": "launch",
+            "module": "rag.cli.main",
+            "args": ["ingest", "${input:documentPath}"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "RAG CLI Query",
+            "type": "python",
+            "request": "launch",
+            "module": "rag.cli.main",
+            "args": ["query", "${input:queryText}"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "documentPath",
+            "type": "promptString",
+            "description": "Path to document or directory to ingest"
+        },
+        {
+            "id": "queryText",
+            "type": "promptString",
+            "description": "Query text to search for"
+        }
+    ]
+} 

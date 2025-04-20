@@ -1,0 +1,935 @@
+### Projekt-Gerüst & Grundverzeichnis
+
+```
+rag-system/
+├── Dockerfile
+├── docker-compose.yml
+├── pyproject.toml
+├── README.md
+├── rag/
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   └── interfaces.py
+│   ├── ingestion/
+│   │   ├── __init__.py
+│   │   ├── file_parser.py
+│   │   ├── markdown_parser.py
+│   │   └── pdf_parser.py
+│   ├── chunking/
+│   │   ├── __init__.py
+│   │   ├── chunker.py
+│   │   ├── token_chunker.py
+│   │   ├── semantic_chunker.py
+│   │   └── layout_chunker.py
+│   ├── embedding/
+│   │   ├── __init__.py
+│   │   ├── embedder.py
+│   │   └── text_embedder.py
+│   ├── store/
+│   │   ├── __init__.py
+│   │   ├── vector_store.py
+│   │   └── chroma_store.py
+│   ├── retrieval/
+│   │   ├── __init__.py
+│   │   ├── retriever.py
+│   │   ├── semantic_retriever.py
+│   │   └── hybrid_retriever.py
+│   ├── prompt/
+│   │   ├── __init__.py
+│   │   └── prompt_builder.py
+│   ├── llm/
+│   │   ├── __init__.py
+│   │   ├── llm_client.py
+│   │   ├── openai_client.py
+│   │   └── local_client.py
+│   ├── post/
+│   │   ├── __init__.py
+│   │   └── post_processor.py
+│   └── cli/
+│       ├── __init__.py
+│       └── main.py
+├── tests/
+│   ├── test_models.py
+│   ├── test_interfaces.py
+│   ├── test_ingestion.py
+│   ├── test_chunking.py
+│   ├── test_embedding.py
+│   ├── test_store.py
+│   ├── test_retrieval.py
+│   ├── test_prompt_builder.py
+│   ├── test_llm_client.py
+│   ├── test_post_processing.py
+│   └── test_cli.py
+
+```
+
+#### 1. `pyproject.toml`
+```toml
+[tool.poetry]
+name = "rag-system"
+version = "0.1.0"
+description = "Modulares RAG-System (Prototyp) für Text-Daten"
+authors = ["Dein Name <email@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pdfplumber = "^0.8.0"
+markdown = "^3.4.1"
+chroma-db = "^0.3.21"
+litellm = "^0.1.0"
+typer = "^0.7.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0.0"
+mypy = "^1.0"
+flake8 = "^6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+```
+
+#### 2. `Dockerfile`
+```dockerfile
+FROM python:3.10-slim
+WORKDIR /app
+COPY pyproject.toml poetry.lock* /app/
+RUN pip install --no-cache-dir poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-dev --no-interaction --no-ansi
+COPY . /app
+CMD ["rag", "--help"]
+```
+
+#### 3. `README.md`
+```markdown
+# RAG-System Prototyp
+
+KOMMANDOS:
+
+```bash
+# Indexieren eines Verzeichnisses
+tag: bash
+rag index /path/to/docs
+
+# Abfragen einer Frage
+tag: bash
+rag query "Was ist RAG?"
+```
+```
+
+---
+
+#### 4. `rag/core/models.py`
+```python
+from typing import List, Any
+
+class Document:
+    def __init__(self, id: str, text: str):
+        self.id = id
+        self.text = text
+
+class Chunk:
+    def __init__(self, id: str, document_id: str, text: str):
+        self.id = id
+        self.document_id = document_id
+        self.text = text
+
+class Vector:
+    def __init__(self, id: str, values: List[float], metadata: Any):
+        self.id = id
+        self.values = values
+        self.metadata = metadata
+
+class Prompt:
+    def __init__(self, question: str, context: List[Chunk]):
+        self.question = question
+        self.context = context
+
+class Response:
+    def __init__(self, text: str, references: List[str]):
+        self.text = text
+        self.references = references
+
+class FinalAnswer(Response):
+    pass
+```
+
+#### 5. `rag/core/interfaces.py`
+```python
+from abc import ABC, abstractmethod
+from typing import List
+from rag.core.models import Document, Chunk, Vector, Prompt, Response
+
+# Parser Interface
+typical_module = "rag.ingestion"
+class IParser(ABC):
+    @abstractmethod
+    def parse(self, path: str) -> List[Document]:
+        pass
+
+class IChunker(ABC):
+    @abstractmethod
+    def chunk(self, document: Document) -> List[Chunk]:
+        pass
+
+class IEmbedder(ABC):
+    @abstractmethod
+    def embed(self, chunks: List[Chunk]) -> List[Vector]:
+        pass
+
+class IVectorStore(ABC):
+    @abstractmethod
+    def upsert(self, vectors: List[Vector]) -> None:
+        pass
+
+    @abstractmethod
+    def query(self, query_vector: List[float], top_k: int) -> List[Vector]:
+        pass
+
+class IRetriever(ABC):
+    @abstractmethod
+    def retrieve(self, query: str) -> List[Chunk]:
+        pass
+
+class IPromptBuilder(ABC):
+    @abstractmethod
+    def build(self, question: str, context: List[Chunk]) -> Prompt:
+        pass
+
+class ILLMClient(ABC):
+    @abstractmethod
+    def generate(self, prompt: Prompt) -> Response:
+        pass
+
+class IPostProcessor(ABC):
+    @abstractmethod
+    def process(self, response: Response) -> FinalAnswer:
+        pass
+```
+
+---
+
+### Phase 3: Chunking Module Implementation
+
+# rag/chunking/chunker.py
+```python
+from abc import ABC, abstractmethod
+from typing import List
+from rag.core.models import Document, Chunk
+
+class Chunker(ABC):
+    @abstractmethod
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Teile ein Dokument in eine Liste von Chunks auf."""
+        pass
+```
+
+# rag/chunking/token_chunker.py
+```python
+from typing import List
+from rag.core.models import Chunk, Document
+from .chunker import Chunker
+import uuid
+
+class TokenChunker(Chunker):
+    def __init__(self, chunk_size: int = 200, overlap: int = 50):
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+
+    def chunk(self, document: Document) -> List[Chunk]:
+        tokens = document.text.split()
+        chunks: List[Chunk] = []
+        start = 0
+        while start < len(tokens):
+            end = min(start + self.chunk_size, len(tokens))
+            chunk_tokens = tokens[start:end]
+            text = ' '.join(chunk_tokens)
+            chunk_id = f"{document.id}::{uuid.uuid4()}"
+            chunks.append(Chunk(id=chunk_id, document_id=document.id, text=text))
+            start += self.chunk_size - self.overlap
+        return chunks
+```
+
+# rag/chunking/semantic_chunker.py
+```python
+from typing import List
+from rag.core.models import Chunk, Document
+from .chunker import Chunker
+import uuid
+
+class SemanticChunker(Chunker):
+    def __init__(self, max_tokens: int = 300):
+        self.max_tokens = max_tokens
+
+    def chunk(self, document: Document) -> List[Chunk]:
+        # Einfache heuristische Implementierung: Gruppe Sätze bis max_tokens erreicht
+        sentences = document.text.replace("\n", " ").split('.')
+        chunks: List[Chunk] = []
+        buffer = []
+        token_count = 0
+        for sentence in sentences:
+            tokens = sentence.split()
+            if token_count + len(tokens) > self.max_tokens and buffer:
+                text = '. '.join(buffer).strip() + '.'
+                chunk_id = f"{document.id}::{uuid.uuid4()}"
+                chunks.append(Chunk(id=chunk_id, document_id=document.id, text=text))
+                buffer = []
+                token_count = 0
+            buffer.append(sentence)
+            token_count += len(tokens)
+        # Letzten Puffer ebenfalls als Chunk
+        if buffer:
+            text = '. '.join(buffer).strip() + '.'
+            chunk_id = f"{document.id}::{uuid.uuid4()}"
+            chunks.append(Chunk(id=chunk_id, document_id=document.id, text=text))
+        return chunks
+```
+
+# rag/chunking/layout_chunker.py
+```python
+from typing import List
+from rag.core.models import Chunk, Document
+from .chunker import Chunker
+import uuid
+
+class LayoutChunker(Chunker):
+    def chunk(self, document: Document) -> List[Chunk]:
+        lines = document.text.splitlines()
+        chunks: List[Chunk] = []
+        buffer = []
+        for line in lines:
+            if line.startswith('#') and buffer:
+                text = '\n'.join(buffer).strip()
+                chunk_id = f"{document.id}::{uuid.uuid4()}"
+                chunks.append(Chunk(id=chunk_id, document_id=document.id, text=text))
+                buffer = []
+            buffer.append(line)
+        # letzten Puffer
+        if buffer:
+            text = '\n'.join(buffer).strip()
+            chunk_id = f"{document.id}::{uuid.uuid4()}"
+            chunks.append(Chunk(id=chunk_id, document_id=document.id, text=text))
+        return chunks
+```
+
+# tests/test_chunking.py
+```python
+import pytest
+from rag.chunking.token_chunker.py import TokenChunker
+from rag.chunking.semantic_chunker import SemanticChunker
+from rag.chunking.layout_chunker import LayoutChunker
+from rag.core.models import Document
+
+@pytest.fixture
+def sample_doc():
+    text = (
+        "# Title\n"
+        "First sentence. Second sentence is a bit longer to test semantic chunking. "
+        "Third sentence. Fourth."  
+    )
+    return Document(id="doc1", text=text)
+
+
+def test_token_chunker(sample_doc):
+    chunker = TokenChunker(chunk_size=5, overlap=2)
+    chunks = chunker.chunk(sample_doc)
+    assert all(len(c.text.split()) <= 5 for c in chunks)
+
+
+def test_semantic_chunker(sample_doc):
+    chunker = SemanticChunker(max_tokens=10)
+    chunks = chunker.chunk(sample_doc)
+    # Bei max 10 Tokens pro Chunk
+    assert all(len(c.text.split()) <= 10 for c in chunks)
+
+
+def test_layout_chunker(sample_doc):
+    chunker = LayoutChunker()
+    chunks = chunker.chunk(sample_doc)
+    # Es sollten mindestens 1 Chunk sein und der erste sollte die Title-Zeile enthalten
+    assert len(chunks) >= 1
+    assert chunks[0].text.startswith('# Title')
+```
+
+### Phase 4: Embedding & Storage
+
+#### 1. `rag/embedding/embedder.py`
+```python
+from abc import ABC, abstractmethod
+from typing import List
+from rag.core.models import Chunk, Vector
+
+class Embedder(ABC):
+    @abstractmethod
+    def embed(self, chunks: List[Chunk]) -> List[Vector]:
+        """Berechnet für jeden Chunk einen Vektor."""
+        pass
+```
+
+#### 2. `rag/embedding/text_embedder.py`
+```python
+from typing import List
+import litellm
+from rag.core.models import Chunk, Vector
+from rag.embedding.embedder import Embedder
+
+class TextEmbedder(Embedder):
+    def __init__(self, model: str = "text-embedding-ada-002"):
+        # LiteLLM-Client initialisieren
+        self.model = model
+        self.client = litellm.LiteLLM()  # Konfiguriert via ENV oder Default
+
+    def embed(self, chunks: List[Chunk]) -> List[Vector]:
+        texts = [chunk.text for chunk in chunks]
+        # Erwartet: client.embed(texts: List[str], model: str) -> List[List[float]]
+        embeddings: List[List[float]] = self.client.embed(texts, model=self.model)
+        vectors: List[Vector] = []
+        for chunk, emb in zip(chunks, embeddings):
+            vectors.append(
+                Vector(
+                    id=chunk.id,
+                    values=emb,
+                    metadata={"document_id": chunk.document_id}
+                )
+            )
+        return vectors
+```
+
+#### 3. `rag/store/vector_store.py`
+```python
+from abc import ABC, abstractmethod
+from typing import List
+from rag.core.models import Vector
+
+class VectorStore(ABC):
+    @abstractmethod
+    def upsert(self, vectors: List[Vector]) -> None:
+        """Speichert oder aktualisiert eine Liste von Vektoren im Store."""
+        pass
+
+    @abstractmethod
+    def query(self, query_vector: List[float], top_k: int) -> List[Vector]:
+        """Fragt die top_k ähnlichsten Vektoren zum query_vector ab."""
+        pass
+```
+
+#### 4. `rag/store/chroma_store.py`
+```python
+from typing import List
+import chromadb
+from rag.core.models import Vector
+from rag.store.vector_store import VectorStore
+
+class ChromaStore(VectorStore):
+    def __init__(self, collection_name: str = "rag_system"):
+        # In-Memory oder lokal persistent
+        self.client = chromadb.Client()
+        # Collection erzeugen (falls nicht existiert)
+        try:
+            self.collection = self.client.get_collection(name=collection_name)
+        except ValueError:
+            self.collection = self.client.create_collection(name=collection_name)
+
+    def upsert(self, vectors: List[Vector]) -> None:
+        ids = [v.id for v in vectors]
+        embeddings = [v.values for v in vectors]
+        metadatas = [v.metadata for v in vectors]
+        # Metadaten und IDs in Chroma speichern
+        self.collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            metadatas=metadatas
+        )
+
+    def query(self, query_vector: List[float], top_k: int) -> List[Vector]:
+        # Suche ausführen
+        res = self.collection.query(
+            query_embeddings=[query_vector],
+            n_results=top_k
+        )
+        # Ergebnisse liegen in Listen verschachtelt: [ [ids...] ], [ [embeddings...] ], [ [metadatas...] ]
+        ids = res['ids'][0]
+        embeddings = res['embeddings'][0]
+        metadatas = res['metadatas'][0]
+        results: List[Vector] = []
+        for vid, emb, meta in zip(ids, embeddings, metadatas):
+            results.append(Vector(id=vid, values=emb, metadata=meta))
+        return results
+```
+
+---
+
+#### 5. Tests für Embedding & Storage
+
+##### `tests/test_embedding.py`
+```python
+import pytest
+from rag.embedding.text_embedder import TextEmbedder
+from rag.core.models import Chunk, Vector
+
+class DummyClient:
+    def __init__(self, embeddings):
+        self._emb = embeddings
+    def embed(self, texts, model=None):
+        # Gibt vorgefertigte Embeddings zurück, Länge entspricht Anzahl Texte
+        assert isinstance(texts, list)
+        return self._emb
+
+@pytest.fixture
+def sample_chunks():
+    return [Chunk(id="c1", document_id="d1", text="hello world")]
+
+def test_text_embedder(monkeypatch, sample_chunks):
+    fake_emb = [[0.1, 0.2, 0.3]]
+    # LiteLLM-Client simulieren
+    monkeypatch.setattr("rag.embedding.text_embedder.litellm.LiteLLM", lambda *args, **kwargs: DummyClient(fake_emb))
+    embedder = TextEmbedder()
+    vectors = embedder.embed(sample_chunks)
+    assert isinstance(vectors, list) and len(vectors) == 1
+    vec: Vector = vectors[0]
+    assert vec.id == "c1"
+    assert vec.values == fake_emb[0]
+    assert vec.metadata["document_id"] == "d1"
+```
+
+##### `tests/test_store.py`
+```python
+import pytest
+from rag.store.chroma_store import ChromaStore
+from rag.core.models import Vector
+
+@pytest.fixture
+def sample_vectors():
+    return [Vector(id="v1", values=[0.5, 0.1, 0.2], metadata={"doc": "d1"})]
+
+def test_chroma_store_upsert_and_query(sample_vectors):
+    store = ChromaStore(collection_name="test_collection")
+    # Upsert und Abfrage
+    store.upsert(sample_vectors)
+    results = store.query(query_vector=sample_vectors[0].values, top_k=1)
+    assert len(results) == 1
+    out = results[0]
+    assert out.id == sample_vectors[0].id
+    assert out.metadata == sample_vectors[0].metadata
+```
+
+---
+
+Damit sind **Phase 4** (Embedding & Storage) Module und erste Tests implementiert. Nächster Schritt wäre **Phase 5: Retrieval & Prompting**.
+
+
+### Phase 5: Retrieval & Prompting
+
+#### 1. `rag/retrieval/retriever.py`
+```python
+from abc import ABC, abstractmethod
+from typing import List
+from rag.core.models import Chunk
+
+class Retriever(ABC):
+    @abstractmethod
+    def retrieve(self, query: str) -> List[Chunk]:
+        """Gibt die relevantesten Chunks zur Query zurück."""
+        pass
+```
+
+#### 2. `rag/retrieval/semantic_retriever.py`
+```python
+from typing import List
+from rag.core.models import Chunk
+from rag.retrieval.retriever import Retriever
+from rag.embedding.embedder import Embedder
+from rag.store.vector_store import VectorStore
+
+class SemanticRetriever(Retriever):
+    def __init__(self, embedder: Embedder, store: VectorStore, top_k: int = 5):
+        self.embedder = embedder
+        self.store = store
+        self.top_k = top_k
+
+    def retrieve(self, query: str) -> List[Chunk]:
+        # Query in Chunk verpacken für Embedder
+        fake_chunk = Chunk(id="query", document_id="", text=query)
+        query_vec = self.embedder.embed([fake_chunk])[0].values
+        vectors = self.store.query(query_vector=query_vec, top_k=self.top_k)
+        chunks: List[Chunk] = []
+        for vec in vectors:
+            # Metadata sollte 'document_id' und optional 'text' enthalten
+            text = vec.metadata.get("text", "")
+            doc_id = vec.metadata.get("document_id", "")
+            chunks.append(Chunk(id=vec.id, document_id=doc_id, text=text))
+        return chunks
+```
+
+#### 3. `rag/retrieval/hybrid_retriever.py`
+```python
+from typing import List
+from rag.core.models import Chunk
+from rag.retrieval.retriever import Retriever
+from rag.retrieval.semantic_retriever import SemanticRetriever
+
+class HybridRetriever(Retriever):
+    def __init__(self, semantic: SemanticRetriever):
+        self.semantic = semantic
+
+    def retrieve(self, query: str) -> List[Chunk]:
+        # Zunächst semantisch
+        chunks = self.semantic.retrieve(query)
+        # Dann einfache Schlüsselwort-Filter: nur Chunks, die Query-Token enthalten
+        keywords = set(query.lower().split())
+        filtered = [c for c in chunks if any(w.lower() in c.text.lower() for w in keywords)]
+        return filtered or chunks
+```
+
+#### 4. `rag/prompt/prompt_builder.py`
+```python
+from typing import List
+from rag.core.models import Prompt, Chunk
+from abc import ABC, abstractmethod
+
+class PromptBuilder(ABC):
+    @abstractmethod
+    def build(self, question: str, context: List[Chunk]) -> Prompt:
+        """Erstellt einen Prompt für das LLM aus Frage und Kontext."""
+        pass
+
+class DefaultPromptBuilder(PromptBuilder):
+    def build(self, question: str, context: List[Chunk]) -> Prompt:
+        # Einfacher Prompt: Frage und Kontext zusammenführen
+        return Prompt(question=question, context=context)
+```
+
+---
+
+#### Tests für Retrieval & Prompting
+
+##### `tests/test_retrieval.py`
+```python
+import pytest
+from rag.retrieval.semantic_retriever import SemanticRetriever
+from rag.retrieval.hybrid_retriever import HybridRetriever
+from rag.core.models import Chunk, Vector
+
+class DummyEmbedder:
+    def embed(self, chunks):
+        # Embedder gibt feste Vektoren zurück
+        return [Vector(id=chunks[0].id, values=[1.0, 0.0], metadata={})]
+
+class DummyStore:
+    def __init__(self, vectors):
+        self.vectors = vectors
+    def query(self, query_vector, top_k):
+        return self.vectors[:top_k]
+
+@pytest.fixture
+def sample_vectors():
+    return [Vector(id="c1", values=[0.0,1.0], metadata={"document_id":"d1","text":"Hello world"}),
+            Vector(id="c2", values=[0.0,1.0], metadata={"document_id":"d2","text":"Other chunk"})]
+
+
+def test_semantic_retriever(sample_vectors):
+    embedder = DummyEmbedder()
+    store = DummyStore(sample_vectors)
+    retr = SemanticRetriever(embedder=embedder, store=store, top_k=2)
+    chunks = retr.retrieve("test")
+    assert isinstance(chunks, list) and len(chunks) == 2
+    assert all(isinstance(c, Chunk) for c in chunks)
+    assert chunks[0].text == "Hello world"
+
+
+def test_hybrid_retriever(sample_vectors):
+    semantic = SemanticRetriever(embedder=DummyEmbedder(), store=DummyStore(sample_vectors), top_k=2)
+    retr = HybridRetriever(semantic=semantic)
+    # Keyword 'Hello' filtert ersten Chunk
+    chunks = retr.retrieve("Hello")
+    assert len(chunks) == 1
+    assert chunks[0].text == "Hello world"
+```
+
+##### `tests/test_prompt_builder.py`
+```python
+from rag.prompt.prompt_builder import DefaultPromptBuilder
+from rag.core.models import Chunk
+
+
+def test_prompt_builder():
+    builder = DefaultPromptBuilder()
+    chunks = [Chunk(id="c1", document_id="d1", text="abc"), Chunk(id="c2", document_id="d2", text="def")]
+    prompt = builder.build("What?", chunks)
+    assert prompt.question == "What?"
+    assert prompt.context == chunks
+
+
+### Phase 6: LLM-Anbindung & Post-Processing
+
+#### 1. `rag/llm/llm_client.py`
+```python
+from abc import ABC, abstractmethod
+from rag.core.models import Prompt, Response
+
+class LLMClient(ABC):
+    @abstractmethod
+    def generate(self, prompt: Prompt) -> Response:
+        """Fragt das LLM mit dem Prompt ab und gibt eine Response zurück."""
+        pass
+```
+
+#### 2. `rag/llm/openai_client.py`
+```python
+import litellm
+from rag.llm.llm_client import LLMClient
+from rag.core.models import Prompt, Response
+
+class OpenAIClient(LLMClient):
+    def __init__(self, model: str = "gpt-3.5-turbo"):
+        self.model = model
+        self.client = litellm.LiteLLM()
+
+    def generate(self, prompt: Prompt) -> Response:
+        # Kontext und Frage zusammensetzen
+        context_text = "\n\n".join([chunk.text for chunk in prompt.context])
+        full_prompt = (
+            "Beantworte die Frage basierend auf folgendem Kontext:\n\n" \
+            f"{context_text}\n\nFrage: {prompt.question}"
+        )
+        # LLM-Aufruf
+        result = self.client.generate(full_prompt, model=self.model)
+        # Ergebnis in Response verpacken
+        text = result['text'] if isinstance(result, dict) else result
+        return Response(text=text, references=[])
+```
+
+#### 3. `rag/llm/local_client.py`
+```python
+import litellm
+from rag.llm.llm_client import LLMClient
+from rag.core.models import Prompt, Response
+
+class LocalModelClient(LLMClient):
+    def __init__(self, model: str = "local-llama"):
+        self.model = model
+        self.client = litellm.LiteLLM()
+
+    def generate(self, prompt: Prompt) -> Response:
+        # Ähnlicher Aufbau wie OpenAIClient
+        context_text = "\n\n".join([chunk.text for chunk in prompt.context])
+        full_prompt = (
+            "Beantworte die Frage basierend auf folgendem Kontext:\n\n" \
+            f"{context_text}\n\nFrage: {prompt.question}"
+        )
+        result = self.client.generate(full_prompt, model=self.model)
+        text = result['text'] if isinstance(result, dict) else result
+        return Response(text=text, references=[])
+```
+
+#### 4. `rag/post/post_processor.py`
+```python
+from rag.core.interfaces import IPostProcessor
+from rag.core.models import Response, FinalAnswer
+
+class CitationProcessor(IPostProcessor):
+    def process(self, response: Response) -> FinalAnswer:
+        # Fügt Quellenangabe am Ende des Texts ein
+        text = response.text
+        if response.references:
+            citations = "\n".join([f"- {ref}" for ref in response.references])
+            text = f"{text}\n\nQuellen:\n{citations}"
+        return FinalAnswer(text=text, references=response.references)
+
+class FeedbackLogger(IPostProcessor):
+    def process(self, response: Response) -> FinalAnswer:
+        # Platzhalter für Feedback-Logging; hier nur CitationProcessor aufrufen
+        return CitationProcessor().process(response)
+```
+
+---
+
+### Tests für Phase 6
+
+#### `tests/test_llm_client.py`
+```python
+import pytest
+from rag.llm.openai_client import OpenAIClient
+from rag.llm.local_client import LocalModelClient
+from rag.core.models import Prompt, Chunk
+
+class DummyLM:
+    def generate(self, prompt_text, model=None):
+        return { 'text': 'Testantwort' }
+
+@pytest.fixture(autouse=True)
+def patch_litellm(monkeypatch):
+    monkeypatch.setattr("rag.llm.openai_client.litellm.LiteLLM", lambda *args, **kwargs: DummyLM())
+    monkeypatch.setattr("rag.llm.local_client.litellm.LiteLLM", lambda *args, **kwargs: DummyLM())
+
+
+def test_openai_client():
+    client = OpenAIClient(model="test-model")
+    prompt = Prompt(question="Test?", context=[Chunk(id="c1", document_id="d1", text="ctx")])
+    resp = client.generate(prompt)
+    assert resp.text == "Testantwort"
+    assert resp.references == []
+
+
+def test_local_client():
+    client = LocalModelClient(model="local-model")
+    prompt = Prompt(question="Test?", context=[Chunk(id="c2", document_id="d2", text="ctx2")])
+    resp = client.generate(prompt)
+    assert resp.text == "Testantwort"
+    assert resp.references == []
+```
+
+#### `tests/test_post_processing.py`
+```python
+from rag.post.post_processor import CitationProcessor, FeedbackLogger
+from rag.core.models import Response, FinalAnswer
+
+
+def test_citation_processor():
+    resp = Response(text="Ergebnis", references=["doc1", "doc2"])
+    proc = CitationProcessor()
+    answer = proc.process(resp)
+    assert isinstance(answer, FinalAnswer)
+    assert "Quellen:" in answer.text
+    assert "- doc1" in answer.text
+
+
+def test_feedback_logger():
+    resp = Response(text="Ergebnis2", references=["d1"])
+    proc = FeedbackLogger()
+    answer = proc.process(resp)
+    assert isinstance(answer, FinalAnswer)
+    assert "- d1" in answer.text
+
+
+### Phase 7: CLI & SDK Implementation
+
+# rag/__init__.py
+```python
+from pathlib import Path
+from rag.ingestion.file_parser import get_parser
+from rag.chunking.token_chunker import TokenChunker
+from rag.embedding.text_embedder import TextEmbedder
+from rag.store.chroma_store import ChromaStore
+from rag.retrieval.semantic_retriever import SemanticRetriever
+from rag.prompt.prompt_builder import DefaultPromptBuilder
+from rag.llm.openai_client import OpenAIClient
+from rag.post.post_processor import CitationProcessor
+
+
+def index(path: str) -> None:
+    """Indexiert alle unterstützten Dokumente im angegebenen Verzeichnis."""
+    store = ChromaStore()
+    chunker = TokenChunker()
+    embedder = TextEmbedder()
+    base = Path(path)
+    for file in base.rglob('*'):
+        try:
+            parser = get_parser(str(file))
+        except ValueError:
+            continue
+        docs = parser.parse(str(file))
+        for doc in docs:
+            chunks = chunker.chunk(doc)
+            vectors = embedder.embed(chunks)
+            store.upsert(vectors)
+
+
+def answer(question: str) -> None:
+    """Beantwortet eine Frage basierend auf dem aktuellen Index."""
+    store = ChromaStore()
+    embedder = TextEmbedder()
+    retriever = SemanticRetriever(embedder=embedder, store=store)
+    chunks = retriever.retrieve(question)
+    prompt = DefaultPromptBuilder().build(question, chunks)
+    raw = OpenAIClient().generate(prompt)
+    final = CitationProcessor().process(raw)
+    print(final.text)
+```
+
+
+# rag/cli/main.py
+```python
+import typer
+from rag import index as sdk_index, answer as sdk_answer
+from rag.store.chroma_store import ChromaStore
+
+app = typer.Typer()
+
+@app.command()
+def index(path: str):
+    """Indexiert alle unterstützten Dateien unter dem angegebenen Pfad."""
+    typer.echo(f"Starte Indexierung von {path}...")
+    sdk_index(path)
+    typer.echo("Indexierung abgeschlossen.")
+
+@app.command(name="query")
+def query_cmd(question: str):
+    """Beantwortet die Frage basierend auf der indexierten Wissensbasis."""
+    typer.echo(f"Beantworte Frage: {question}")
+    sdk_answer(question)
+
+@app.command()
+def status():
+    """Zeigt aktuelle Statistiken zum Vektorstore an."""
+    store = ChromaStore()
+    count = store.collection.count()
+    typer.echo(f"Anzahl der Vektoren: {count}")
+
+@app.command()
+def evaluate():
+    """Führt Evaluierungstests durch (noch nicht implementiert)."""
+    typer.echo("Auswertung noch nicht implementiert.")
+``` 
+
+# tests/test_cli.py
+```python
+import pytest
+from typer.testing import CliRunner
+from rag.cli.main import app
+import rag
+
+@pytest.fixture(autouse=True)
+def patch_sdk(monkeypatch):
+    """Isolation: SDK-Funktionen mocken, damit CLI-Aufrufe schnell laufen."""
+    monkeypatch.setattr(rag, "index", lambda path: print(f"Indexed {path}"))
+    monkeypatch.setattr(rag, "answer", lambda q: print(f"Answered {q}"))
+
+
+def test_index_command(tmp_path):
+    runner = CliRunner()
+    result = runner.invoke(app, ["index", str(tmp_path)])
+    assert result.exit_code == 0
+    assert f"Indexed {tmp_path}" in result.stdout
+
+
+def test_query_command():
+    runner = CliRunner()
+    result = runner.invoke(app, ["query", "Hallo Welt?"])
+    assert result.exit_code == 0
+    assert "Answered Hallo Welt?" in result.stdout
+
+
+def test_status_command(monkeypatch):
+    from rag.store.chroma_store import ChromaStore
+    # Mock count
+    class DummyStore:
+        def __init__(self):
+            self.collection = type('C', (), {'count': lambda self: 42})()
+    monkeypatch.setattr("rag.cli.main.ChromaStore", lambda: DummyStore())
+    runner = CliRunner()
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    assert "Anzahl der Vektoren: 42" in result.stdout
+
+
+def test_evaluate_command():
+    runner = CliRunner()
+    result = runner.invoke(app, ["evaluate"])
+    assert result.exit_code == 0
+    assert "Auswertung noch nicht implementiert." in result.stdout
+
+
