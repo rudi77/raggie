@@ -11,62 +11,111 @@
      - `tests/`  
 
 2. **Core-Abstraktionen definieren**  
-   - [ ] In `text2sql/core/interfaces.py` die Interfaces anlegen:  
-     - `ISchemaLoader`  
-     - `IText2SQLAgent`  
-     - `IExecutor`  
-   - [ ] In `text2sql/core/models.py` DTO-Klassen erstellen:  
-     - `NLQuery`  
-     - `SQLQuery`  
-     - `QueryResult`  
+   - [x] In `text2sql/core/interfaces.py` die Interfaces anlegen:  
+     - [x] `SchemaLoader`  
+     - [x] `DatabaseConnector`  
+     - [x] `QueryEngine`  
+     - [x] `SQLExecutor`  
+     - [x] `ResultFormatter`  
+   - [x] In `text2sql/core/schema.py` Schema-Modelle erstellen:  
+     - [x] `Column`  
+     - [x] `Table`  
+     - [x] `DatabaseSchema`  
+   - [x] In `text2sql/core/config.py` Konfigurationsmodelle:  
+     - [x] `DatabaseConfig`  
+     - [x] `LLMConfig`  
+     - [x] `Text2SQLConfig`  
+   - [x] In `text2sql/core/exceptions.py` Fehlerklassen:  
+     - [x] `Text2SQLError`  
+     - [x] `SchemaError`  
+     - [x] `ConnectionError`  
+     - [x] `QueryGenerationError`  
+     - [x] `QueryExecutionError`  
+     - [x] `FormattingError`  
 
-3. **Datenbank-Connector implementieren**  
-   - [ ] In `text2sql/db/connector.py`  
-     - SQLAlchemy-Engine initialisieren.  
-     - Einen `SQLDatabaseConnector` schreiben, der eine Verbindung herstellt und Metadaten lädt.  
-   - [ ] Unit-Test in `tests/test_connector.py` für Verbindungsaufbau und Metadaten-Abfrage.  
+3. **Basis-Implementierungen**  
+   - [x] In `text2sql/core/base.py` Basisklassen erstellen:  
+     - [x] `BaseSchemaLoader`  
+     - [x] `BaseDatabaseConnector`  
+     - [x] `BaseQueryEngine`  
+     - [x] `BaseSQLExecutor`  
+     - [x] `BaseResultFormatter`  
 
-4. **Schema Loader umsetzen**  
-   - [ ] In `text2sql/db/schema_loader.py`  
-     - Tabellen und Spalten aus der Datenbank introspektieren.  
-     - Ergebnis als Schema-Beschreibung bereitstellen.  
-   - [ ] Unit-Test in `tests/test_schema_loader.py` schreiben.  
+4. **SQLite-Implementierung**  
+   - [x] In `text2sql/core/sqlite.py` SQLite-spezifische Klassen:  
+     - [x] `SQLiteSchemaLoader`  
+     - [x] `SQLiteConnector`  
+     - [x] `SQLiteExecutor`  
+   - [x] Unit-Tests in `tests/test_sqlite.py`:
+     - [x] Test-Datenbank-Setup
+     - [x] Connector-Tests
+     - [x] Executor-Tests
+     - [x] Fehlerbehandlung
 
-5. **Text2SQL Agent**  
-   - [ ] In `text2sql/agent/sql_agent.py`  
-     - `NLSQLTableQueryEngine` (LlamaIndex) konfigurieren und in eine Klasse `Text2SQLAgent` kapseln.  
-     - Prompt-Templates in `agent/prompt_templates.py` anpassen (z. B. System- und User-Prompts).  
-   - [ ] Unit-Test in `tests/test_agent.py` zum Generieren von SQL aus Beispiel-NL-Fragen.  
+5. **Query Generation Engine**  
+   - [ ] In `text2sql/agent/engine.py`:
+     - [ ] LLM-Integration für SQL-Generierung
+     - [ ] Prompt-Templates für verschiedene Anwendungsfälle
+     - [ ] Schema-Kontext-Integration
+     - [ ] Query-Validierung
+   - [ ] Unit-Tests in `tests/test_engine.py`
 
-6. **SQL-Executor bauen**  
-   - [ ] In `text2sql/execution/executor.py`  
-     - Methode `execute(sql_query: SQLQuery) -> QueryResult` implementieren.  
-     - SQL sicher ausführen und Ergebnisse (Rows, Spaltennamen) sammeln.  
-   - [ ] Unit-Test in `tests/test_executor.py` für einfache SELECT-Queries.  
+6. **Result Formatter**  
+   - [ ] In `text2sql/formatters/`:
+     - [ ] `TextFormatter` für lesbare Ausgabe
+     - [ ] `JSONFormatter` für API-Integration
+     - [ ] `CSVFormatter` für Datenexport
+   - [ ] Unit-Tests in `tests/test_formatters.py`
 
 7. **CLI & SDK**  
-   - [ ] In `text2sql/cli/main.py`  
-     - Typer-Befehle definieren:  
-       - `t2s query "<Frage>"` → Rückgabe von `QueryResult`.  
-       - `t2s explain "<Frage>"` → zeigt generierten SQL.  
-       - `t2s status` → prüft DB-Verbindung.  
-   - [ ] In `text2sql/__init__.py` SDK-Funktionen bereitstellen:  
-     - `query(nl: str) -> QueryResult`  
-     - `explain(nl: str) -> str`  
-   - [ ] CLI-Tests in `tests/test_cli_text2sql.py` schreiben.  
+   - [ ] In `text2sql/cli/main.py`:
+     - [ ] Typer-Befehle definieren:
+       - [ ] `t2s query "<Frage>"` → Rückgabe von `QueryResult`
+       - [ ] `t2s explain "<Frage>"` → zeigt generierten SQL
+       - [ ] `t2s status` → prüft DB-Verbindung
+       - [ ] `t2s config` → Konfiguration verwalten
+   - [ ] In `text2sql/__init__.py` SDK-Funktionen:
+     - [ ] `query(nl: str) -> QueryResult`
+     - [ ] `explain(nl: str) -> str`
+     - [ ] `configure(config: Text2SQLConfig)`
+   - [ ] CLI-Tests in `tests/test_cli.py`
 
-8. **Integrationstest**  
-   - [ ] Kompletten Workflow in einem Test validieren:  
-     - NL-Frage → Agent → SQL → Executor → Ergebnisformat.  
-   - [ ] Beispiel-Datenbank (z. B. SQLite) für Tests anlegen und einbinden.  
+8. **Integration & Tests**  
+   - [ ] Kompletten Workflow in `tests/test_integration.py`:
+     - [ ] NL-Frage → Agent → SQL → Executor → Ergebnisformat
+     - [ ] Fehlerbehandlung und Edge Cases
+     - [ ] Performance-Tests
+   - [ ] Beispiel-Datenbank und Beispieldaten:
+     - [ ] SQLite-Schema für Tests
+     - [ ] Beispieldaten für verschiedene Anwendungsfälle
+     - [ ] Dokumentation der Testfälle
 
-9. **Dokumentation & Demo**  
-   - [ ] README-Abschnitt „Text2SQL" ergänzen (Quickstart, Beispiele).  
-   - [ ] Beispiel-Datenbank und Beispiel-Fragen im Repository bereitstellen.  
+9. **Dokumentation**  
+   - [ ] README-Abschnitt "Text2SQL":
+     - [ ] Quickstart-Guide
+     - [ ] Konfigurationsoptionen
+     - [ ] API-Dokumentation
+     - [ ] Beispiele und Use Cases
+   - [ ] Code-Dokumentation:
+     - [ ] Docstrings vervollständigen
+     - [ ] Typ-Annotationen prüfen
+     - [ ] Beispiele in Docstrings
 
-10. **Optional: CI-Integration**  
-   - [ ] CI-Jobs (z. B. GitHub Actions) um Tasks für Text2SQL-Tests erweitern.  
+10. **CI/CD & Qualität**  
+    - [ ] GitHub Actions erweitern:
+      - [ ] Text2SQL-spezifische Tests
+      - [ ] Linting und Type-Checking
+      - [ ] Coverage-Reports
+    - [ ] Code-Qualität:
+      - [ ] Ruff-Konfiguration anpassen
+      - [ ] MyPy-Konfiguration prüfen
+      - [ ] Black-Formatierung sicherstellen
 
 ---
 
-**Tipp:** Arbeite erst am nächsten Feature nachdem alle Test Lint-Stati grün sind.
+**Nächste Schritte:**
+1. Query Generation Engine implementieren
+2. Result Formatter entwickeln
+3. CLI & SDK aufbauen
+
+**Tipp:** Arbeite erst am nächsten Feature nachdem alle Test- und Lint-Stati grün sind.
