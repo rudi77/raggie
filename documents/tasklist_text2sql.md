@@ -67,16 +67,16 @@
    - [ ] Unit-Tests in `tests/test_formatters.py`
 
 7. **CLI & SDK**  
-   - [ ] In `text2sql/cli/main.py`:
-     - [ ] Typer-Befehle definieren:
-       - [ ] `t2s query "<Frage>"` → Rückgabe von `QueryResult`
-       - [ ] `t2s explain "<Frage>"` → zeigt generierten SQL
-       - [ ] `t2s status` → prüft DB-Verbindung
-       - [ ] `t2s config` → Konfiguration verwalten
-   - [ ] In `text2sql/__init__.py` SDK-Funktionen:
-     - [ ] `query(nl: str) -> QueryResult`
-     - [ ] `explain(nl: str) -> str`
-     - [ ] `configure(config: Text2SQLConfig)`
+   - [x] In `text2sql/cli/main.py`:
+     - [x] Typer-Befehle definieren:
+       - [x] `t2s query "<Frage>"` → Rückgabe von `QueryResult`
+       - [x] `t2s explain "<Frage>"` → zeigt generierten SQL
+       - [x] `t2s status` → prüft DB-Verbindung
+       - [x] `t2s config` → Konfiguration verwalten
+   - [x] In `text2sql/__init__.py` SDK-Funktionen:
+     - [x] `query(nl: str) -> QueryResult`
+     - [x] `explain(nl: str) -> str`
+     - [x] `configure(config: Text2SQLConfig)`
    - [ ] CLI-Tests in `tests/test_cli.py`
 
 8. **Integration & Tests**  
@@ -115,6 +115,6 @@
 **Nächste Schritte:**
 1. ~~Query Generation Engine implementieren~~ ✓ (Implementiert mit LlamaIndex's NLSQLTableQueryEngine)
 2. ~~Result Formatter entwickeln~~ ✓ (Implementiert mit Text, JSON und CSV Formatter)
-3. CLI & SDK aufbauen
+3. ~~CLI & SDK aufbauen~~ ✓ (Implementiert mit Typer CLI und Python SDK)
 
 **Tipp:** Arbeite erst am nächsten Feature nachdem alle Test- und Lint-Stati grün sind.
