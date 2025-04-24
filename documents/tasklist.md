@@ -35,8 +35,10 @@ Hier eine Schritt-für-Schritt-Checkliste, mit der ihr das RAG‑System modular 
 ### Phase 3: Chunking  
 - [x] `rag/chunking/chunker.py` – Chunker‑Interface  
 - [x] `rag/chunking/token_chunker.py` – token‑basiertes Chunking  
-- [ ] `rag/chunking/semantic_chunker.py` – semantik‑basiertes Chunking (ggf. mit Embedding‑Clustering)  
-- [ ] `rag/chunking/layout_chunker.py` – layout‑basiertes Chunking (z.B. nach Überschriften)  
+- [x] `rag/chunking/recursive_character_chunker.py` – character-basiertes Chunking
+- [x] `rag/chunking/markdown_chunker.py` – markdown-basiertes Chunking
+- [x] `rag/chunking/html_chunker.py` – HTML-basiertes Chunking
+- [x] `rag/chunking/chunker_factory.py` – Factory für Chunking-Strategien
 - [ ] Unit‑Tests für jede Chunking‑Strategie  
 
 ---
@@ -108,7 +110,7 @@ Hier eine Schritt-für-Schritt-Checkliste, mit der ihr das RAG‑System modular 
 - **Phase 0**: 4/5 abgeschlossen (80%)
 - **Phase 1**: 2/2 abgeschlossen (100%)
 - **Phase 2**: 2/5 abgeschlossen (40%)
-- **Phase 3**: 2/4 abgeschlossen (50%)
+- **Phase 3**: 6/7 abgeschlossen (86%)
 - **Phase 4**: 4/6 abgeschlossen (67%)
 - **Phase 5**: 0/5 abgeschlossen (0%)
 - **Phase 6**: 1/5 abgeschlossen (20%)
@@ -117,4 +119,4 @@ Hier eine Schritt-für-Schritt-Checkliste, mit der ihr das RAG‑System modular 
 - **Phase 9**: 1/3 abgeschlossen (33%)
 - **Phase 10**: 0/3 abgeschlossen (0%)
 
-**Gesamtfortschritt**: 17/44 Aufgaben abgeschlossen (39%)
+**Gesamtfortschritt**: 21/48 Aufgaben abgeschlossen (44%)

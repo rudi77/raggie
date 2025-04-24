@@ -1,19 +1,24 @@
 from pathlib import Path
 from typing import List, Optional, Union
+import uuid
+from datetime import datetime
 
 from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredMarkdownLoader,
 )
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document as LangchainDocument
+
+from rag.core.models import Document as RagDocument, Chunk
+from rag.chunking import ChunkerFactory
 
 class DocumentLoader:
     """Handles loading and processing of various document types."""
 
     def __init__(self):
-        self.text_splitter = RecursiveCharacterTextSplitter()
+        # We'll create the appropriate chunker when needed
+        self.chunker = None
 
     def load_documents(
         self, path: Union[str, Path], recursive: bool = False
@@ -53,8 +58,46 @@ class DocumentLoader:
     def chunk_document(
         self, document: LangchainDocument, chunk_size: int = 1000, chunk_overlap: int = 200
     ) -> List[LangchainDocument]:
-        """Split a document into chunks."""
-        self.text_splitter.chunk_size = chunk_size
-        self.text_splitter.chunk_overlap = chunk_overlap
+        """Split a document into chunks using the appropriate chunker."""
+        # Get the source file path from metadata
+        source_path = document.metadata.get('source', '')
         
-        return self.text_splitter.split_documents([document]) 
+        # Create the appropriate chunker based on the file type
+        self.chunker = ChunkerFactory.get_chunker_for_file(
+            source_path,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        
+        print(f"Using chunker: {self.chunker.__class__.__name__} for document: {source_path}")
+        
+        # Convert LangchainDocument to our RagDocument
+        rag_document = RagDocument(
+            id=str(uuid.uuid4()),
+            content=document.page_content,
+            metadata=document.metadata,
+            source=source_path,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        
+        # Use our custom chunker
+        chunks = self.chunker.chunk(rag_document)
+        
+        # Convert our Chunks back to LangchainDocuments
+        langchain_chunks = []
+        for chunk in chunks:
+            langchain_chunk = LangchainDocument(
+                page_content=chunk.content,
+                metadata={
+                    **document.metadata,
+                    "chunk_id": chunk.id,
+                    "document_id": chunk.document_id,
+                    "start_index": chunk.metadata.get("start_index", 0),
+                    "end_index": chunk.metadata.get("end_index", 0),
+                    "chunker_type": self.chunker.__class__.__name__
+                }
+            )
+            langchain_chunks.append(langchain_chunk)
+        
+        return langchain_chunks 

@@ -34,6 +34,12 @@ The system is organized into the following main directories:
 
 - **core/**: Contains core data models and interfaces
 - **chunking/**: Implements text chunking strategies
+  - `chunker.py`: Base chunker interface
+  - `token_chunker.py`: Token-based chunking implementation
+  - `recursive_character_chunker.py`: Character-based recursive chunking
+  - `markdown_chunker.py`: Markdown-aware chunking
+  - `html_chunker.py`: HTML-aware chunking
+  - `chunker_factory.py`: Factory for creating appropriate chunkers
 - **embedding/**: Implements vector embedding generation
 - **store/**: Implements vector storage and retrieval
 - **llm/**: Implements LLM client interactions
@@ -51,7 +57,11 @@ The system is organized into the following main directories:
 ## Data Flow
 
 1. Documents are ingested and parsed into Document objects
-2. Documents are chunked into smaller pieces
+2. Documents are chunked into smaller pieces using appropriate chunking strategies:
+   - Text files use recursive character chunking
+   - Markdown files use markdown-aware chunking
+   - HTML files use HTML-aware chunking
+   - The chunker factory selects the best chunker based on file type
 3. Chunks are embedded into vectors
 4. Vectors are stored in the vector store
 5. Queries are processed through the same pipeline
