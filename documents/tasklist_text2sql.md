@@ -60,10 +60,10 @@
    - [ ] Unit-Tests in `tests/test_engine.py`
 
 6. **Result Formatter**  
-   - [ ] In `text2sql/formatters/`:
-     - [ ] `TextFormatter` für lesbare Ausgabe
-     - [ ] `JSONFormatter` für API-Integration
-     - [ ] `CSVFormatter` für Datenexport
+   - [x] In `text2sql/formatters/`:
+     - [x] `TextFormatter` für lesbare Ausgabe
+     - [x] `JSONFormatter` für API-Integration
+     - [x] `CSVFormatter` für Datenexport
    - [ ] Unit-Tests in `tests/test_formatters.py`
 
 7. **CLI & SDK**  
@@ -114,7 +114,7 @@
 
 **Nächste Schritte:**
 1. ~~Query Generation Engine implementieren~~ ✓ (Implementiert mit LlamaIndex's NLSQLTableQueryEngine)
-2. Result Formatter entwickeln
+2. ~~Result Formatter entwickeln~~ ✓ (Implementiert mit Text, JSON und CSV Formatter)
 3. CLI & SDK aufbauen
 
 **Tipp:** Arbeite erst am nächsten Feature nachdem alle Test- und Lint-Stati grün sind.
