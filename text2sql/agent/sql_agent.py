@@ -1,89 +1,72 @@
-"""SQL agent implementation using LlamaIndex's NLSQLTableQueryEngine."""
-import logging
-from typing import Any, Dict, Optional
+"""SQL agent implementation using LlamaIndex."""
+from pathlib import Path
+from typing import Dict, Optional, Any
+from sqlalchemy import inspect
 
-from llama_index.indices.struct_store import NLSQLTableQueryEngine
-from llama_index.indices.struct_store.sql import SQLDatabase
-from llama_index.llms import OpenAI
+from llama_index.core import SQLDatabase
+from llama_index.core.query_engine import NLSQLTableQueryEngine
+from llama_index.llms.openai import OpenAI
 
-from ..core.config import LLMConfig
 from ..core.exceptions import QueryGenerationError
-from ..core.interfaces import QueryEngine
-from ..core.schema import DatabaseSchema
 
-logger = logging.getLogger(__name__)
+class SQLAgent:
+    """SQL agent that uses LlamaIndex's NLSQLTableQueryEngine for natural language queries."""
+    
+    def __init__(
+        self,
+        database_url: str,
+        llm: Optional[Any] = None,
+    ):
+        """Initialize the SQL agent.
+        
+        Args:
+            database_url: URL to the database (e.g. sqlite:///path/to/db.sqlite)
+            llm: Optional language model to use. If not provided, uses OpenAI.
+        """
+        self.llm = llm or OpenAI()
+        self.sql_database = SQLDatabase.from_uri(database_url)
+        self.query_engine = NLSQLTableQueryEngine(
+            sql_database=self.sql_database,
+            llm=self.llm,
+            tables=self.sql_database.get_usable_table_names()
+        )
 
-
-class SQLAgent(QueryEngine):
-    """Agent for converting natural language to SQL queries using LlamaIndex."""
-
-    def __init__(self, llm_config: LLMConfig):
-        """Initialize the SQL agent with LLM configuration."""
-        self.llm_config = llm_config
-        self.llm = self._initialize_llm()
-        self.query_engine = None
-
-    def _initialize_llm(self) -> OpenAI:
-        """Initialize the LLM with the provided configuration."""
-        try:
-            return OpenAI(
-                model=self.llm_config.model_name,
-                temperature=self.llm_config.temperature,
-                max_tokens=self.llm_config.max_tokens,
-                api_key=self.llm_config.api_key,
-                request_timeout=self.llm_config.timeout,
-                **self.llm_config.additional_params
-            )
-        except Exception as e:
-            raise QueryGenerationError(f"Failed to initialize LLM: {str(e)}")
-
-    def _initialize_query_engine(self, sql_database: SQLDatabase) -> None:
-        """Initialize the LlamaIndex query engine with the SQL database."""
-        try:
-            self.query_engine = NLSQLTableQueryEngine(
-                sql_database=sql_database,
-                llm=self.llm,
-                verbose=True
-            )
-        except Exception as e:
-            raise QueryGenerationError(f"Failed to initialize query engine: {str(e)}")
-
-    async def generate_sql(self,
-                         natural_query: str,
-                         schema: DatabaseSchema,
-                         context: Optional[Dict[str, Any]] = None) -> str:
-        """Convert natural language query to SQL using LlamaIndex."""
-        try:
-            if not self.query_engine:
-                raise QueryGenerationError("Query engine not initialized. Call initialize_query_engine first.")
-
-            # Generate SQL using LlamaIndex's query engine
-            response = await self.query_engine.aquery(natural_query)
+    async def query(self, question: str) -> Dict[str, Any]:
+        """Execute a natural language query against the database.
+        
+        Args:
+            question: Natural language question about the data
             
-            # Extract the SQL query from the response
-            # LlamaIndex's response includes both the SQL and the result
-            # We want to return just the SQL part
-            sql_query = response.metadata.get("sql_query", "")
-            if not sql_query:
-                raise QueryGenerationError("No SQL query generated")
+        Returns:
+            Dictionary containing the answer, SQL query, and raw result
             
-            return sql_query
-            
-        except Exception as e:
-            logger.error(f"Error generating SQL: {str(e)}")
-            raise QueryGenerationError(f"Failed to generate SQL: {str(e)}")
-
-    async def validate_sql(self, sql_query: str, schema: DatabaseSchema) -> bool:
-        """Validate if the SQL query is valid for the given schema."""
+        Raises:
+            QueryGenerationError: If query generation or execution fails
+        """
         try:
-            if not self.query_engine:
-                return False
-
-            # Let LlamaIndex's SQLDatabase handle the validation
-            # It will raise an exception if the SQL is invalid
-            await self.query_engine.sql_database.run_sql(sql_query)
-            return True
-            
+            response = await self.query_engine.aquery(question)
+            return {
+                "answer": str(response),
+                "sql_query": response.metadata.get("sql_query", ""),
+                "result": response.metadata.get("result", None)
+            }
         except Exception as e:
-            logger.error(f"Error validating SQL: {str(e)}")
-            return False
+            raise QueryGenerationError(f"Failed to generate or execute query: {str(e)}")
+
+    def get_table_info(self) -> str:
+        """Get information about available tables in the database.
+        
+        Returns:
+            String containing table schema information
+        """
+        inspector = inspect(self.sql_database._engine)
+        table_info = []
+        
+        for table_name in inspector.get_table_names():
+            columns = inspector.get_columns(table_name)
+            table_info.append(f"\nTable: {table_name}")
+            for col in columns:
+                nullable = "NULL" if col["nullable"] else "NOT NULL"
+                table_info.append(f"  {col['name']} {col['type']} {nullable}")
+        
+        return "\n".join(table_info)

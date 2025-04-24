@@ -57,7 +57,13 @@
      - [x] LlamaIndex's NLSQLTableQueryEngine Integration für SQL-Generierung
      - [x] Schema-Kontext-Integration
      - [x] Query-Validierung
-   - [ ] Unit-Tests in `tests/test_engine.py`
+   - [x] Unit-Tests in `tests/test_sql_agent.py`:
+     - [x] Test-Datenbank-Setup mit Beispieldaten
+     - [x] Basis-Query-Tests
+     - [x] Datum-Filter-Tests
+     - [x] Aggregations-Tests
+     - [x] Tabellen-Info-Tests
+     - [~] Fehlerbehandlung (teilweise implementiert)
 
 6. **Result Formatter**  
    - [x] In `text2sql/formatters/`:
@@ -84,10 +90,10 @@
      - [ ] NL-Frage → Agent → SQL → Executor → Ergebnisformat
      - [ ] Fehlerbehandlung und Edge Cases
      - [ ] Performance-Tests
-   - [ ] Beispiel-Datenbank und Beispieldaten:
-     - [ ] SQLite-Schema für Tests
-     - [ ] Beispieldaten für verschiedene Anwendungsfälle
-     - [ ] Dokumentation der Testfälle
+   - [x] Beispiel-Datenbank und Beispieldaten:
+     - [x] SQLite-Schema für Tests
+     - [x] Beispieldaten für verschiedene Anwendungsfälle
+     - [x] Dokumentation der Testfälle
 
 9. **Dokumentation**  
    - [ ] README-Abschnitt "Text2SQL":
@@ -116,5 +122,12 @@
 1. ~~Query Generation Engine implementieren~~ ✓ (Implementiert mit LlamaIndex's NLSQLTableQueryEngine)
 2. ~~Result Formatter entwickeln~~ ✓ (Implementiert mit Text, JSON und CSV Formatter)
 3. ~~CLI & SDK aufbauen~~ ✓ (Implementiert mit Typer CLI und Python SDK)
+4. ~~SQL Agent Tests implementieren~~ ✓ (Implementiert mit pytest und pytest-asyncio)
+
+**Aktuelle Prioritäten:**
+1. Result Formatter Tests implementieren
+2. CLI Tests entwickeln
+3. Integration Tests aufsetzen
+4. Dokumentation vervollständigen
 
 **Tipp:** Arbeite erst am nächsten Feature nachdem alle Test- und Lint-Stati grün sind.

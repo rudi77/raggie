@@ -14,7 +14,6 @@ from .core.exceptions import (
     SchemaError,
     Text2SQLError,
 )
-from .core.schema import DatabaseSchema
 from .core.sqlite import SQLiteConnector, SQLiteExecutor, SQLiteSchemaLoader
 from .formatters.factory import FormatterFactory
 
@@ -93,22 +92,17 @@ async def _initialize_components():
     # Initialize database components
     if cfg.database.type == "sqlite":
         connector = SQLiteConnector(cfg.database)
-        schema_loader = SQLiteSchemaLoader(connector)
         executor = SQLiteExecutor(connector)
     else:
         raise ConnectionError(f"Unsupported database type: {cfg.database.type}")
     
-    # Load schema
-    schema = await schema_loader.load_schema()
+    # Get database URL
+    db_url = connector.get_connection_string()
     
-    # Initialize agent
-    agent = SQLAgent(cfg.llm)
+    # Initialize agent with database URL
+    agent = SQLAgent(db_url=db_url, llm=cfg.llm)
     
-    # Initialize query engine
-    sql_database = connector.get_sql_database()
-    agent._initialize_query_engine(sql_database)
-    
-    return agent, executor, schema
+    return agent, executor
 
 
 class QueryResult:
@@ -149,10 +143,10 @@ async def query(nl: str, format_type: Optional[str] = None) -> QueryResult:
             cfg.output_format = format_type
             
         # Initialize components
-        agent, executor, schema = await _initialize_components()
+        agent, executor = await _initialize_components()
         
         # Generate SQL
-        sql = await agent.generate_sql(nl, schema)
+        sql = await agent.generate_sql(nl)
         
         # Execute SQL
         result = await executor.execute(sql)
@@ -186,10 +180,10 @@ async def explain(nl: str) -> str:
     """
     try:
         # Initialize components
-        agent, _, schema = await _initialize_components()
+        agent, _ = await _initialize_components()
         
         # Generate SQL
-        sql = await agent.generate_sql(nl, schema)
+        sql = await agent.generate_sql(nl)
         
         return sql
         
