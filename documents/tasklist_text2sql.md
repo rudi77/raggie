@@ -53,11 +53,10 @@
      - [x] Fehlerbehandlung
 
 5. **Query Generation Engine**  
-   - [ ] In `text2sql/agent/engine.py`:
-     - [ ] LLM-Integration für SQL-Generierung
-     - [ ] Prompt-Templates für verschiedene Anwendungsfälle
-     - [ ] Schema-Kontext-Integration
-     - [ ] Query-Validierung
+   - [x] In `text2sql/agent/sql_agent.py`:
+     - [x] LlamaIndex's NLSQLTableQueryEngine Integration für SQL-Generierung
+     - [x] Schema-Kontext-Integration
+     - [x] Query-Validierung
    - [ ] Unit-Tests in `tests/test_engine.py`
 
 6. **Result Formatter**  
@@ -114,7 +113,7 @@
 ---
 
 **Nächste Schritte:**
-1. Query Generation Engine implementieren
+1. ~~Query Generation Engine implementieren~~ ✓ (Implementiert mit LlamaIndex's NLSQLTableQueryEngine)
 2. Result Formatter entwickeln
 3. CLI & SDK aufbauen
 
