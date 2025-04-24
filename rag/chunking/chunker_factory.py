@@ -4,6 +4,7 @@ from .token_chunker import TokenChunker
 from .recursive_character_chunker import RecursiveCharacterChunker
 from .markdown_chunker import MarkdownChunker
 from .html_chunker import HTMLChunker
+from .page_wise_chunker import PageWiseChunker
 
 class ChunkerFactory:
     """Factory for creating chunkers based on document type."""
@@ -13,7 +14,8 @@ class ChunkerFactory:
         "token": TokenChunker,
         "recursive": RecursiveCharacterChunker,
         "markdown": MarkdownChunker,
-        "html": HTMLChunker
+        "html": HTMLChunker,
+        "page": PageWiseChunker
     }
     
     @classmethod
@@ -55,18 +57,31 @@ class ChunkerFactory:
         
         # Map extensions to chunker types
         extension_map = {
-            'md': 'markdown',
-            'markdown': 'markdown',
+            'md': 'page',  # Use page-wise chunker for Markdown
+            'markdown': 'page',  # Use page-wise chunker for Markdown
             'html': 'html',
             'htm': 'html',
+            'pdf': 'page',  # Use page-wise chunker for PDFs
             'txt': 'recursive',
-            'pdf': 'recursive',
             'doc': 'recursive',
             'docx': 'recursive'
         }
         
         # Get the appropriate chunker type
         chunker_type = extension_map.get(extension, 'recursive')
+        
+        # Set file-type specific configurations
+        if chunker_type == 'page':
+            if extension in ['md', 'markdown']:
+                # For Markdown, use a smaller min_page_size since sections tend to be smaller
+                kwargs.setdefault('min_page_size', 50)
+            else:  # PDF
+                # For PDFs, use a larger min_page_size since pages tend to be larger
+                kwargs.setdefault('min_page_size', 200)
+            
+            # Remove chunk_size and chunk_overlap for PageWiseChunker as it doesn't use them
+            kwargs.pop('chunk_size', None)
+            kwargs.pop('chunk_overlap', None)
         
         # Create and return the chunker
         return cls.get_chunker(chunker_type, **kwargs)
