@@ -4,85 +4,111 @@ Hier findest du eine klare, schrittweise abarbeitbare **Taskliste** zur Integrat
 
 ## ✅ Vorbereitung & Setup
 
-- [ ] **Projektordner erstellen**
-  - Erstelle einen neuen Ordner `frontend/` auf oberster Ebene.
-  - Erstelle einen neuen Ordner `backend/` auf oberster Ebene.
+- [x] **Projektordner erstellen**
+  - [x] Erstelle einen neuen Ordner `frontend/` auf oberster Ebene.
+  - [x] Erstelle einen neuen Ordner `backend/` auf oberster Ebene.
 
-- [ ] **Vorhandenen React-Code übernehmen**
-  - Kopiere vorhandenen React-Code (`cxo_dashboard_code.txt`) nach `frontend/src/`.
+- [x] **Vorhandenen React-Code übernehmen**
+  - [x] Kopiere vorhandenen React-Code (`cxo_dashboard_code.txt`) nach `frontend/src/`.
 
-- [ ] **Vorhandenen FastAPI-Code übernehmen**
-  - Kopiere Backend-Code (`cxo_backend_code.txt`) nach `backend/`.
+- [x] **Vorhandenen FastAPI-Code übernehmen**
+  - [x] Kopiere Backend-Code (`cxo_backend_code.txt`) nach `backend/`.
+
+---
+
+## 🚀 Frontend-Implementierung (React)
+
+- [x] **Basis-Setup**
+  - [x] Initialisiere React-Projekt in `frontend/`
+  - [x] Konfiguriere TypeScript
+  - [x] Richte TailwindCSS ein
+
+- [x] **Layout & Design**
+  - [x] Header mit Logo, Titel und Theme-Toggle
+  - [x] Dunkles Farbschema implementieren
+  - [x] Responsive Layout erstellen
+
+- [x] **ChatInterface-Komponente**
+  - [x] Chat-UI mit Nachrichten-Bubbles
+  - [x] Eingabefeld mit Attachments & Send-Button
+  - [x] Korrekte Ausrichtung und Abstände
+  - [x] Zeitstempel-Formatierung
+
+- [ ] **DynamicRenderer-Komponente**
+  - [x] Basis-Implementierung
+  - [ ] Fehlerbehandlung verbessern
+  - [ ] Ladeanimationen hinzufügen
 
 ---
 
 ## 🚀 Backend-Implementierung (FastAPI)
 
 - [ ] **FastAPI-Grundgerüst** (`backend/main.py`)
-  - Initialisiere FastAPI und CORS-Middleware.
+  - [ ] Initialisiere FastAPI und CORS-Middleware
+  - [ ] Basis-Routen einrichten
+  - [ ] Error Handling implementieren
 
 - [ ] **API-Endpunkte erstellen** (`backend/api/sql_queries.py`)
-  - POST `/api/query`: Erhält Frage vom Frontend, nutzt Text2SQL-Agent, liefert Ergebnis.
+  - [ ] POST `/api/query`: Text2SQL-Integration
+  - [ ] Validierung der Eingaben
+  - [ ] Response-Formatierung
 
 - [ ] **LLamaIndex-Service integrieren** (`backend/services/llamaindex_service.py`)
-  - Bestehenden Text2SQL-Agent importieren und anpassen.
+  - [ ] Text2SQL-Agent anbinden
+  - [ ] Query-Verarbeitung implementieren
+  - [ ] Ergebnis-Transformation
 
 - [ ] **LLM-Integration für Codegenerierung** (`backend/api/components.py`)
-  - Implementiere eine Methode zur Generierung von React-Code aus SQL-Ergebnissen via LLM (OpenAI).
-
-- [ ] **Tests für Backend-Komponenten** (`tests/test_backend/`)
-  - Unit- und Integrationstests für API und Services implementieren.
-
----
-
-## 🎨 Frontend-Implementierung (React)
-
-- [ ] **Basis-Setup**
-  - Initialisiere React-Projekt (Vite oder CRA) in `frontend/`.
-
-- [ ] **ChatInterface-Komponente**
-  - Bestehenden Chat-UI-Code integrieren (`ChatInterface.tsx`).
-
-- [ ] **DynamicRenderer-Komponente**
-  - React-Code dynamisch kompilieren und ausführen (`DynamicRenderer.tsx`).
-
-- [ ] **API-Integration**
-  - Frontend an FastAPI anbinden (`fetch` API-Calls an `http://localhost:8000/api/query`).
-
-- [ ] **Tests für Frontend**
-  - Unit-Tests für Komponenten (`Jest`, `React Testing Library`).
+  - [ ] OpenAI API Integration
+  - [ ] React-Code Generierung
+  - [ ] Code-Validierung
 
 ---
 
-## 🛠 Integration (End-to-End)
+## 🛠 Integration & Testing
 
-- [ ] **Docker Compose konfigurieren**
-  - Erstelle `docker-compose.yml`, das Frontend, Backend und DB startet.
+- [ ] **Docker Setup**
+  - [ ] Frontend Dockerfile
+  - [ ] Backend Dockerfile
+  - [ ] Docker Compose Konfiguration
 
-- [ ] **End-to-End Integrationstest**
-  - Frontend → Backend → Text2SQL → Datenbank → Ergebnis visualisieren.
-  - Validierung eines vollständigen Workflows mit einer Beispiel-Frage.
+- [ ] **End-to-End Tests**
+  - [ ] Frontend Unit Tests
+  - [ ] Backend Unit Tests
+  - [ ] Integrationstests
+  - [ ] Performance Tests
 
 ---
 
-## 📃 Dokumentation & Demo
+## 📃 Dokumentation
 
 - [ ] **README aktualisieren**
-  - Kurze Anleitung zur lokalen Ausführung und Nutzung des Dashboards.
+  - [ ] Setup-Anleitung
+  - [ ] API-Dokumentation
+  - [ ] Beispiele hinzufügen
 
-- [ ] **Demo-Video oder Screenshots**
-  - Erstelle einen kleinen Demo-Ablauf als Video oder Screenshots.
-
----
-
-## 🔐 Vorbereitung weiterer Features (optional)
-
-- [ ] **Authentifizierung & RBAC vorbereiten**
-  - Planung der Anbindung eines Security & Audit Service.
-
-- [ ] **RAG-Komponente vorbereiten**
-  - Schnittstelle für spätere RAG-Abfragen im Backend vorbereiten.
+- [ ] **Code-Dokumentation**
+  - [ ] Frontend-Komponenten
+  - [ ] Backend-Services
+  - [ ] API-Endpunkte
 
 ---
+
+## 🔜 Nächste Schritte
+
+- [ ] **Performance-Optimierung**
+  - [ ] Code-Splitting
+  - [ ] Caching-Strategien
+  - [ ] Lazy Loading
+
+- [ ] **Sicherheit**
+  - [ ] Input Validation
+  - [ ] Rate Limiting
+  - [ ] Error Handling
+
+- [ ] **Features**
+  - [ ] Datei-Upload
+  - [ ] Export-Funktionen
+  - [ ] Filter & Suche
 
 Mit dieser Taskliste hast du eine klare und logische Roadmap, um die **Text2SQL-Funktionalität** effektiv ins CxO Dashboard zu integrieren und schnell erste, nutzbare Ergebnisse zu erhalten!
