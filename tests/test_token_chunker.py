@@ -51,4 +51,5 @@ def test_token_chunker_chunk_smaller_than_size():
     
     chunks = chunker.chunk(doc)
     assert len(chunks) == 1
-    assert chunks[0].content == doc.content 
+    assert chunks[0].content == doc.content
+    assert chunks[0].document_id == doc.id 

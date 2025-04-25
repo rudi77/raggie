@@ -2,12 +2,15 @@
 import os
 import sqlite3
 from pathlib import Path
-from create_test_db import create_test_db, DB_PATH
+from .create_test_db import create_test_db
+
+# Define the database path locally
+DB_PATH = Path("test.db")
 
 def test_database_creation():
     """Test that the database is created correctly."""
     # Create the database
-    create_test_db()
+    create_test_db(str(DB_PATH))
     
     # Verify the database exists
     assert DB_PATH.exists(), "Database file was not created"
@@ -33,7 +36,7 @@ def test_database_creation():
     
     # Test a basic query
     cursor.execute("""
-    SELECT account_name, period, amount 
+    SELECT customer, period, amount 
     FROM transactions 
     WHERE revenue_relevant = 'Ja' 
     ORDER BY period DESC 
@@ -52,13 +55,13 @@ def test_data_integrity():
     
     # Test specific values
     cursor.execute("""
-    SELECT account_name, amount 
+    SELECT customer, amount 
     FROM transactions 
-    WHERE account_name = 'Musterdebitor Gewo GmbH' 
-    AND period = '202401'
+    WHERE customer = 'Musterdebitor Gewo GmbH' 
+    AND period = '2024/09'
     """)
     results = cursor.fetchall()
-    assert len(results) > 0, "No data found for Musterdebitor Gewo GmbH in 202401"
+    assert len(results) > 0, "No data found for Musterdebitor Gewo GmbH in 2024/09"
     
     # Test data types
     cursor.execute("""

@@ -175,3 +175,4 @@ cython_debug/
 uv.lock
 data/
 documents/text2sql_testdata.csv
+test.db

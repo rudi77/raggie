@@ -35,6 +35,20 @@ class JSONFormatter(BaseFormatter):
             FormattingError: If formatting fails.
         """
         try:
+            # Handle None and empty lists
+            if result is None:
+                return json.dumps(
+                    {"result": None},
+                    indent=self.indent,
+                    ensure_ascii=self.ensure_ascii
+                )
+            elif result == []:
+                return json.dumps(
+                    {"result": []},
+                    indent=self.indent,
+                    ensure_ascii=self.ensure_ascii
+                )
+            
             # Convert result to a serializable format
             serializable_result = self._make_serializable(result)
             
@@ -59,8 +73,7 @@ class JSONFormatter(BaseFormatter):
             The formatted error message as a JSON string.
         """
         error_dict = {
-            "error": True,
-            "message": str(error),
+            "error": str(error),
             "type": error.__class__.__name__
         }
         

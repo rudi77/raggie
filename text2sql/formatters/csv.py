@@ -41,28 +41,28 @@ class CSVFormatter(BaseFormatter):
             FormattingError: If formatting fails.
         """
         try:
-            if result is None:
-                return ""
+            if result is None or result == []:
+                return self._format_message("No results")
                 
-            # Convert to a list of dictionaries if needed
-            rows = self._prepare_rows(result)
-            if not rows:
-                return ""
+            if not isinstance(result, dict) or "columns" not in result or "rows" not in result:
+                return self._format_message("Invalid result format")
                 
             # Write to a string buffer
             output = io.StringIO()
-            writer = csv.DictWriter(
+            writer = csv.writer(
                 output,
-                fieldnames=rows[0].keys(),
                 delimiter=self.delimiter,
                 quotechar=self.quotechar,
                 quoting=self.quoting,
                 lineterminator=self.lineterminator
             )
             
-            # Write header and rows
-            writer.writeheader()
-            writer.writerows(rows)
+            # Write header
+            writer.writerow(result["columns"])
+            
+            # Write data rows
+            for row in result["rows"]:
+                writer.writerow(row)
             
             return output.getvalue()
             
@@ -88,8 +88,31 @@ class CSVFormatter(BaseFormatter):
             lineterminator=self.lineterminator
         )
         
-        writer.writerow(["error", "message", "type"])
-        writer.writerow([True, str(error), error.__class__.__name__])
+        writer.writerow(["error"])
+        writer.writerow([str(error)])
+        
+        return output.getvalue()
+
+    def _format_message(self, message: str) -> str:
+        """Format a simple message as CSV.
+        
+        Args:
+            message: The message to format.
+            
+        Returns:
+            The formatted message as a CSV string.
+        """
+        output = io.StringIO()
+        writer = csv.writer(
+            output,
+            delimiter=self.delimiter,
+            quotechar=self.quotechar,
+            quoting=self.quoting,
+            lineterminator=self.lineterminator
+        )
+        
+        writer.writerow(["message"])
+        writer.writerow([message])
         
         return output.getvalue()
 
