@@ -5,6 +5,7 @@ from sqlalchemy import inspect
 
 from llama_index.core import SQLDatabase
 from llama_index.core.query_engine import NLSQLTableQueryEngine
+from llama_index.core.retrievers import NLSQLRetriever
 from llama_index.llms.openai import OpenAI
 
 from ..core.exceptions import QueryGenerationError
@@ -30,8 +31,14 @@ class SQLAgent:
             llm=self.llm,
             tables=self.sql_database.get_usable_table_names()
         )
+        self.retriever = NLSQLRetriever(
+            sql_database=self.sql_database,
+            llm=self.llm,
+            tables=self.sql_database.get_usable_table_names()
+        )
 
-    async def query(self, question: str) -> Dict[str, Any]:
+
+    async def query(self, question: str, retriever: bool = True) -> Dict[str, Any]:
         """Execute a natural language query against the database.
         
         Args:
@@ -44,12 +51,21 @@ class SQLAgent:
             QueryGenerationError: If query generation or execution fails
         """
         try:
-            response = await self.query_engine.aquery(question)
-            return {
-                "answer": str(response),
-                "sql_query": response.metadata.get("sql_query", ""),
-                "result": response.metadata.get("result", None)
-            }
+            if retriever:
+                print(f'__________retriever___________ : {question}\n{self.retriever._text_to_sql_prompt}')
+                response = await self.retriever.aretrieve(question)
+                print(response)
+                return {"answer": response,
+                        "sql_query": response.metadata.get("sql_query", ""),
+                        "result": response.metadata.get("result", None)
+                        }
+            else:
+                response = await self.query_engine.aquery(question)
+                return {
+                    "answer": str(response),
+                    "sql_query": response.metadata.get("sql_query", ""),
+                    "result": response.metadata.get("result", None)
+                }
         except Exception as e:
             raise QueryGenerationError(f"Failed to generate or execute query: {str(e)}")
 
