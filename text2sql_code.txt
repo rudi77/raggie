@@ -1,0 +1,2469 @@
+
+// Relative Path: agent\sql_agent.py
+
+"""SQL agent implementation using LlamaIndex."""
+from pathlib import Path
+from typing import Dict, Optional, Any
+from sqlalchemy import inspect
+
+from llama_index.core import SQLDatabase
+from llama_index.core.query_engine import NLSQLTableQueryEngine
+from llama_index.core.retrievers import NLSQLRetriever
+from llama_index.llms.openai import OpenAI
+
+from ..core.exceptions import QueryGenerationError
+
+class SQLAgent:
+    """SQL agent that uses LlamaIndex's NLSQLTableQueryEngine for natural language queries."""
+    
+    def __init__(
+        self,
+        database_url: str,
+        llm: Optional[Any] = None,
+    ):
+        """Initialize the SQL agent.
+        
+        Args:
+            database_url: URL to the database (e.g. sqlite:///path/to/db.sqlite)
+            llm: Optional language model to use. If not provided, uses OpenAI.
+        """
+        self.llm = llm or OpenAI()
+        self.sql_database = SQLDatabase.from_uri(database_url)
+        self.query_engine = NLSQLTableQueryEngine(
+            sql_database=self.sql_database,
+            llm=self.llm,
+            tables=self.sql_database.get_usable_table_names()
+        )
+        self.retriever = NLSQLRetriever(
+            sql_database=self.sql_database,
+            llm=self.llm,
+            tables=self.sql_database.get_usable_table_names()
+        )
+
+
+    async def query(self, question: str, retriever: bool = True) -> Dict[str, Any]:
+        """Execute a natural language query against the database.
+        
+        Args:
+            question: Natural language question about the data
+            
+        Returns:
+            Dictionary containing the answer, SQL query, and raw result
+            
+        Raises:
+            QueryGenerationError: If query generation or execution fails
+        """
+        try:
+            if retriever:
+                print(f'__________retriever___________ : {question}\n{self.retriever._text_to_sql_prompt}')
+                response = await self.retriever.aretrieve(question)
+                print(response)
+                return {"answer": response,
+                        "sql_query": response.metadata.get("sql_query", ""),
+                        "result": response.metadata.get("result", None)
+                        }
+            else:
+                response = await self.query_engine.aquery(question)
+                return {
+                    "answer": str(response),
+                    "sql_query": response.metadata.get("sql_query", ""),
+                    "result": response.metadata.get("result", None)
+                }
+        except Exception as e:
+            raise QueryGenerationError(f"Failed to generate or execute query: {str(e)}")
+
+    def get_table_info(self) -> str:
+        """Get information about available tables in the database.
+        
+        Returns:
+            String containing table schema information
+        """
+        inspector = inspect(self.sql_database._engine)
+        table_info = []
+        
+        for table_name in inspector.get_table_names():
+            columns = inspector.get_columns(table_name)
+            table_info.append(f"\nTable: {table_name}")
+            for col in columns:
+                nullable = "NULL" if col["nullable"] else "NOT NULL"
+                table_info.append(f"  {col['name']} {col['type']} {nullable}")
+        
+        return "\n".join(table_info)
+
+
+
+
+// Relative Path: agent\__init__.py
+
+
+
+
+// Relative Path: cli\main.py
+
+"""Command-line interface for Text2SQL."""
+import asyncio
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
+from ..agent.sql_agent import SQLAgent
+from ..core.config import DatabaseConfig, LLMConfig, Text2SQLConfig
+from ..core.exceptions import (
+    ConnectionError,
+    QueryExecutionError,
+    QueryGenerationError,
+    SchemaError,
+    Text2SQLError,
+)
+from ..core.schema import DatabaseSchema
+from ..core.sqlite import SQLiteConnector, SQLiteExecutor, SQLiteSchemaLoader
+from ..formatters.factory import FormatterFactory
+
+# Initialize Typer app
+app = typer.Typer(
+    name="t2s",
+    help="Text2SQL - Convert natural language to SQL queries",
+    add_completion=False,
+)
+
+# Initialize Rich console
+console = Console()
+
+# Global configuration
+config_path = Path.home() / ".text2sql" / "config.json"
+config: Optional[Text2SQLConfig] = None
+
+
+def load_config() -> Text2SQLConfig:
+    """Load configuration from file or create default."""
+    global config
+    
+    if config is not None:
+        return config
+        
+    if config_path.exists():
+        try:
+            with open(config_path, "r") as f:
+                config_data = json.load(f)
+                config = Text2SQLConfig(**config_data)
+                return config
+        except Exception as e:
+            console.print(f"[red]Error loading config: {str(e)}[/red]")
+    
+    # Create default config
+    config = Text2SQLConfig(
+        database=DatabaseConfig(
+            type="sqlite",
+            path=":memory:",
+            username="",
+            password="",
+            host="",
+            port=0,
+        ),
+        llm=LLMConfig(
+            model_name="gpt-3.5-turbo",
+            temperature=0.0,
+            max_tokens=1000,
+            api_key=os.environ.get("OPENAI_API_KEY", ""),
+            timeout=30,
+        ),
+        output_format="text",
+    )
+    
+    # Save default config
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config.dict(), f, indent=2)
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not save default config: {str(e)}[/yellow]")
+    
+    return config
+
+
+def save_config() -> None:
+    """Save current configuration to file."""
+    global config
+    
+    if config is None:
+        return
+        
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config.dict(), f, indent=2)
+        console.print("[green]Configuration saved successfully.[/green]")
+    except Exception as e:
+        console.print(f"[red]Error saving config: {str(e)}[/red]")
+
+
+async def initialize_components():
+    """Initialize database and agent components."""
+    cfg = load_config()
+    
+    # Initialize database components
+    if cfg.database.type == "sqlite":
+        connector = SQLiteConnector(cfg.database)
+        schema_loader = SQLiteSchemaLoader(connector)
+        executor = SQLiteExecutor(connector)
+    else:
+        raise ConnectionError(f"Unsupported database type: {cfg.database.type}")
+    
+    # Load schema
+    schema = await schema_loader.load_schema()
+    
+    # Initialize agent
+    agent = SQLAgent(cfg.llm)
+    
+    # Initialize query engine
+    sql_database = connector.get_sql_database()
+    agent._initialize_query_engine(sql_database)
+    
+    return agent, executor, schema
+
+
+@app.command()
+def query(
+    question: str = typer.Argument(..., help="Natural language question to convert to SQL"),
+    format: str = typer.Option(None, "--format", "-f", help="Output format (text, json, csv)"),
+):
+    """Convert a natural language question to SQL and execute it."""
+    try:
+        # Load config and override format if specified
+        cfg = load_config()
+        if format:
+            cfg.output_format = format
+            
+        # Initialize components
+        agent, executor, schema = asyncio.run(initialize_components())
+        
+        # Generate SQL
+        sql = asyncio.run(agent.generate_sql(question, schema))
+        
+        # Execute SQL
+        result = asyncio.run(executor.execute(sql))
+        
+        # Format result
+        formatter = FormatterFactory.create(cfg.output_format)
+        formatted_result = asyncio.run(formatter.format(result))
+        
+        # Display result
+        console.print(Panel(formatted_result, title="Query Result", border_style="green"))
+        
+    except QueryGenerationError as e:
+        console.print(f"[red]Error generating SQL: {str(e)}[/red]")
+    except QueryExecutionError as e:
+        console.print(f"[red]Error executing SQL: {str(e)}[/red]")
+    except Text2SQLError as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+
+
+@app.command()
+def explain(
+    question: str = typer.Argument(..., help="Natural language question to explain"),
+):
+    """Show the SQL that would be generated for a question without executing it."""
+    try:
+        # Initialize components
+        agent, _, schema = asyncio.run(initialize_components())
+        
+        # Generate SQL
+        sql = asyncio.run(agent.generate_sql(question, schema))
+        
+        # Display SQL
+        console.print(Panel(sql, title="Generated SQL", border_style="blue"))
+        
+    except QueryGenerationError as e:
+        console.print(f"[red]Error generating SQL: {str(e)}[/red]")
+    except Text2SQLError as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+
+
+@app.command()
+def status():
+    """Check database connection and configuration status."""
+    try:
+        # Load config
+        cfg = load_config()
+        
+        # Create status table
+        table = Table(title="Text2SQL Status")
+        table.add_column("Component", style="cyan")
+        table.add_column("Status", style="green")
+        table.add_column("Details", style="yellow")
+        
+        # Check config
+        config_exists = config_path.exists()
+        table.add_row(
+            "Configuration",
+            "✓" if config_exists else "✗",
+            str(config_path) if config_exists else "Default config will be created",
+        )
+        
+        # Check database
+        if cfg.database.type == "sqlite":
+            db_path = cfg.database.path
+            db_exists = db_path == ":memory:" or Path(db_path).exists()
+            table.add_row(
+                "Database",
+                "✓" if db_exists else "✗",
+                f"SQLite: {db_path}",
+            )
+        else:
+            table.add_row(
+                "Database",
+                "✗",
+                f"Unsupported type: {cfg.database.type}",
+            )
+        
+        # Check LLM
+        api_key = cfg.llm.api_key
+        api_key_set = bool(api_key)
+        table.add_row(
+            "LLM API Key",
+            "✓" if api_key_set else "✗",
+            "Set" if api_key_set else "Not set (set OPENAI_API_KEY env var)",
+        )
+        
+        # Display table
+        console.print(table)
+        
+    except Exception as e:
+        console.print(f"[red]Error checking status: {str(e)}[/red]")
+
+
+@app.command()
+def config(
+    db_type: Optional[str] = typer.Option(None, "--db-type", help="Database type (sqlite)"),
+    db_path: Optional[str] = typer.Option(None, "--db-path", help="Database path (for SQLite)"),
+    model: Optional[str] = typer.Option(None, "--model", help="LLM model name"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API key"),
+    format: Optional[str] = typer.Option(None, "--format", help="Output format (text, json, csv)"),
+    show: bool = typer.Option(False, "--show", help="Show current configuration"),
+):
+    """Configure Text2SQL settings."""
+    try:
+        # Load current config
+        cfg = load_config()
+        
+        # Show current config if requested
+        if show:
+            console.print(Panel(json.dumps(cfg.dict(), indent=2), title="Current Configuration"))
+            return
+        
+        # Update config with provided values
+        if db_type:
+            cfg.database.type = db_type
+        if db_path:
+            cfg.database.path = db_path
+        if model:
+            cfg.llm.model_name = model
+        if api_key:
+            cfg.llm.api_key = api_key
+        if format:
+            cfg.output_format = format
+            
+        # Save updated config
+        save_config()
+        
+        # Show updated config
+        console.print(Panel(json.dumps(cfg.dict(), indent=2), title="Updated Configuration"))
+        
+    except Exception as e:
+        console.print(f"[red]Error updating configuration: {str(e)}[/red]")
+
+
+if __name__ == "__main__":
+    app()
+
+
+
+
+// Relative Path: cli\__init__.py
+
+"""Command-line interface for Text2SQL."""
+from .main import app
+
+__all__ = ["app"]
+
+
+
+
+// Relative Path: core\base.py
+
+"""Base implementations of core interfaces."""
+from typing import Any, Dict, List, Optional
+import time
+import logging
+from abc import ABC, abstractmethod
+
+from .interfaces import (
+    DatabaseSchema, QueryResult, SchemaLoader, DatabaseConnector,
+    QueryEngine, SQLExecutor, ResultFormatter
+)
+from .exceptions import (
+    SchemaError, ConnectionError, QueryGenerationError,
+    QueryExecutionError, FormattingError
+)
+
+logger = logging.getLogger(__name__)
+
+
+class BaseSchemaLoader(SchemaLoader, ABC):
+    """Base implementation of SchemaLoader protocol."""
+    
+    def __init__(self) -> None:
+        self._cached_schema: Optional[DatabaseSchema] = None
+        self._last_refresh: float = 0
+        self._cache_ttl: int = 3600  # 1 hour default
+
+    @abstractmethod
+    async def _fetch_schema(self, connection_string: str) -> DatabaseSchema:
+        """Actual implementation of schema fetching logic."""
+        pass
+
+    async def load_schema(self, connection_string: str) -> DatabaseSchema:
+        """Load the database schema from the given connection."""
+        try:
+            schema = await self._fetch_schema(connection_string)
+            self._cached_schema = schema
+            self._last_refresh = time.time()
+            return schema
+        except Exception as e:
+            raise SchemaError(f"Failed to load schema: {str(e)}")
+
+    async def refresh_schema(self) -> DatabaseSchema:
+        """Refresh the current schema."""
+        if not self._cached_schema:
+            raise SchemaError("No schema loaded to refresh")
+        return await self.load_schema(self._connection_string)
+
+
+class BaseDatabaseConnector(DatabaseConnector, ABC):
+    """Base implementation of DatabaseConnector protocol."""
+
+    def __init__(self) -> None:
+        self._connection = None
+        self._schema_loader: Optional[SchemaLoader] = None
+        self._connection_string: Optional[str] = None
+
+    @abstractmethod
+    async def _establish_connection(self, connection_string: str) -> Any:
+        """Actual implementation of connection establishment."""
+        pass
+
+    @abstractmethod
+    async def _close_connection(self) -> None:
+        """Actual implementation of connection closing."""
+        pass
+
+    async def connect(self, connection_string: str) -> None:
+        """Establish a database connection."""
+        try:
+            self._connection = await self._establish_connection(connection_string)
+            self._connection_string = connection_string
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to database: {str(e)}")
+
+    async def disconnect(self) -> None:
+        """Close the database connection."""
+        if self._connection:
+            try:
+                await self._close_connection()
+                self._connection = None
+            except Exception as e:
+                raise ConnectionError(f"Failed to disconnect: {str(e)}")
+
+    async def is_connected(self) -> bool:
+        """Check if the database connection is active."""
+        return self._connection is not None
+
+    async def get_schema(self) -> DatabaseSchema:
+        """Get the current database schema."""
+        if not self._schema_loader:
+            raise SchemaError("No schema loader configured")
+        return await self._schema_loader.load_schema(self._connection_string)
+
+
+class BaseQueryEngine(QueryEngine):
+    """Base implementation of QueryEngine protocol."""
+
+    async def generate_sql(self,
+                         natural_query: str,
+                         schema: DatabaseSchema,
+                         context: Optional[Dict[str, Any]] = None) -> str:
+        """Convert natural language query to SQL."""
+        try:
+            # Subclasses should implement the actual LLM-based conversion
+            raise NotImplementedError("Subclasses must implement generate_sql")
+        except Exception as e:
+            raise QueryGenerationError(f"Failed to generate SQL: {str(e)}")
+
+    async def validate_sql(self, sql_query: str, schema: DatabaseSchema) -> bool:
+        """Validate if the SQL query is valid for the given schema."""
+        try:
+            # Subclasses should implement actual validation logic
+            raise NotImplementedError("Subclasses must implement validate_sql")
+        except Exception as e:
+            raise QueryGenerationError(f"Failed to validate SQL: {str(e)}")
+
+
+class BaseSQLExecutor(SQLExecutor):
+    """Base implementation of SQLExecutor protocol."""
+
+    def __init__(self, connector: DatabaseConnector):
+        self._connector = connector
+
+    async def execute_query(self, sql_query: str) -> QueryResult:
+        """Execute a SQL query and return the results."""
+        try:
+            start_time = time.time()
+            # Subclasses should implement actual query execution
+            raise NotImplementedError("Subclasses must implement execute_query")
+        except Exception as e:
+            raise QueryExecutionError(f"Failed to execute query: {str(e)}")
+
+    async def execute_batch(self, queries: List[str]) -> List[QueryResult]:
+        """Execute multiple SQL queries in a batch."""
+        results = []
+        for query in queries:
+            try:
+                result = await self.execute_query(query)
+                results.append(result)
+            except QueryExecutionError as e:
+                logger.error(f"Failed to execute query in batch: {str(e)}")
+                results.append(QueryResult(
+                    columns=[],
+                    rows=[],
+                    affected_rows=0,
+                    execution_time=0,
+                    query=query
+                ))
+        return results
+
+
+class BaseResultFormatter(ResultFormatter):
+    """Base implementation of ResultFormatter protocol."""
+
+    def format_result(self,
+                     result: QueryResult,
+                     format_type: str = "text",
+                     **kwargs: Any) -> str:
+        """Format the query result in the specified format."""
+        try:
+            if format_type not in self.get_supported_formats():
+                raise FormattingError(f"Unsupported format type: {format_type}")
+            # Subclasses should implement actual formatting logic
+            raise NotImplementedError("Subclasses must implement format_result")
+        except Exception as e:
+            raise FormattingError(f"Failed to format result: {str(e)}")
+
+    def get_supported_formats(self) -> List[str]:
+        """Get list of supported output formats."""
+        return ["text", "json", "csv"]  # Base supported formats 
+
+
+
+// Relative Path: core\config.py
+
+"""Configuration models for Text2SQL."""
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+
+class DatabaseConfig(BaseModel):
+    """Database connection configuration."""
+    host: str = Field(..., description="Database host")
+    port: int = Field(..., description="Database port")
+    database: str = Field(..., description="Database name")
+    username: str = Field(..., description="Database username")
+    password: str = Field(..., description="Database password")
+    schema: str = Field(default="public", description="Database schema")
+    ssl_mode: Optional[str] = Field(default=None, description="SSL mode for connection")
+    pool_size: int = Field(default=5, description="Connection pool size")
+    max_overflow: int = Field(default=10, description="Maximum number of connections")
+
+
+class LLMConfig(BaseModel):
+    """LLM configuration."""
+    model_name: str = Field(..., description="Name of the LLM model")
+    api_key: str = Field(..., description="API key for LLM service")
+    temperature: float = Field(default=0.7, description="Sampling temperature")
+    max_tokens: int = Field(default=1000, description="Maximum tokens in response")
+    timeout: int = Field(default=30, description="API request timeout in seconds")
+    additional_params: Dict[str, Any] = Field(default_factory=dict, description="Additional model parameters")
+
+
+class Text2SQLConfig(BaseSettings):
+    """Main configuration for Text2SQL component."""
+    database: DatabaseConfig = Field(..., description="Database configuration")
+    llm: LLMConfig = Field(..., description="LLM configuration")
+    cache_schema: bool = Field(default=True, description="Whether to cache database schema")
+    schema_cache_ttl: int = Field(default=3600, description="Schema cache TTL in seconds")
+    debug_mode: bool = Field(default=False, description="Enable debug mode")
+    log_level: str = Field(default="INFO", description="Logging level")
+
+    class Config:
+        env_prefix = "TEXT2SQL_"
+        case_sensitive = False 
+
+
+
+// Relative Path: core\database.py
+
+from sqlalchemy import create_engine, MetaData, Table, Column, String, Integer, select
+from llama_index.core import SQLDatabase
+
+def create_sql_database(db_url="sqlite:///:memory:"):
+    """Create and initialize the SQL database."""
+    engine = create_engine(db_url)
+    metadata_obj = MetaData()
+    
+    # Create tables
+    city_stats_table = Table(
+        "city_stats",
+        metadata_obj,
+        Column("city_name", String(16), primary_key=True),
+        Column("population", Integer),
+        Column("country", String(16), nullable=False),
+    )
+    
+    # Create all tables in the database
+    metadata_obj.create_all(engine)
+    
+    # Create LlamaIndex SQLDatabase wrapper
+    sql_database = SQLDatabase(engine, include_tables=["city_stats"])
+    
+    return sql_database, engine, metadata_obj
+
+def insert_test_data(engine, city_stats_table):
+    """Insert some test data into the database."""
+    from sqlalchemy import insert
+    
+    rows = [
+        {"city_name": "Toronto", "population": 2930000, "country": "Canada"},
+        {"city_name": "Tokyo", "population": 13960000, "country": "Japan"},
+        {"city_name": "Chicago", "population": 2679000, "country": "United States"},
+        {"city_name": "Seoul", "population": 9776000, "country": "South Korea"},
+    ]
+    
+    for row in rows:
+        stmt = insert(city_stats_table).values(**row)
+        with engine.begin() as connection:
+            connection.execute(stmt) 
+
+
+
+// Relative Path: core\exceptions.py
+
+"""Custom exceptions for the Text2SQL component."""
+from typing import Optional
+
+
+class Text2SQLError(Exception):
+    """Base exception for all Text2SQL errors."""
+    def __init__(self, message: str, details: Optional[dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class SchemaError(Text2SQLError):
+    """Raised when there are issues with database schema operations."""
+    pass
+
+
+class ConnectionError(Text2SQLError):
+    """Raised when database connection fails."""
+    pass
+
+
+class QueryGenerationError(Text2SQLError):
+    """Raised when LLM fails to generate a valid SQL query."""
+    pass
+
+
+class QueryExecutionError(Text2SQLError):
+    """Raised when SQL query execution fails."""
+    pass
+
+
+class ValidationError(Text2SQLError):
+    """Raised when input validation fails."""
+    pass
+
+
+class ConfigurationError(Text2SQLError):
+    """Raised when there are configuration issues."""
+    pass
+
+
+class FormattingError(Text2SQLError):
+    """Raised when result formatting fails."""
+    pass 
+
+
+
+// Relative Path: core\interfaces.py
+
+"""Core interfaces for the Text2SQL component."""
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from pydantic import BaseModel
+
+
+class DatabaseSchema(BaseModel):
+    """Represents a database schema with tables and their relationships."""
+    tables: Dict[str, "TableSchema"]
+    relationships: List["SchemaRelationship"]
+
+class TableSchema(BaseModel):
+    """Represents a database table schema."""
+    name: str
+    columns: Dict[str, "ColumnSchema"]
+    primary_key: List[str]
+    description: Optional[str] = None
+
+class ColumnSchema(BaseModel):
+    """Represents a database column schema."""
+    name: str
+    data_type: str
+    is_nullable: bool
+    description: Optional[str] = None
+    foreign_key: Optional["ForeignKeyReference"] = None
+
+class ForeignKeyReference(BaseModel):
+    """Represents a foreign key reference."""
+    table: str
+    column: str
+
+class SchemaRelationship(BaseModel):
+    """Represents a relationship between tables."""
+    from_table: str
+    to_table: str
+    type: str  # one_to_one, one_to_many, many_to_many
+    through_table: Optional[str] = None  # For many_to_many relationships
+
+class QueryResult(BaseModel):
+    """Represents the result of a SQL query execution."""
+    columns: List[str]
+    rows: List[List[Any]]
+    affected_rows: Optional[int] = None
+    execution_time: float
+    query: str
+
+@runtime_checkable
+class SchemaLoader(Protocol):
+    """Protocol for loading database schemas."""
+    async def load_schema(self, connection_string: str) -> DatabaseSchema:
+        """Load the database schema from the given connection."""
+        ...
+
+    async def refresh_schema(self) -> DatabaseSchema:
+        """Refresh the current schema."""
+        ...
+
+@runtime_checkable
+class DatabaseConnector(Protocol):
+    """Protocol for database connections and operations."""
+    async def connect(self, connection_string: str) -> None:
+        """Establish a database connection."""
+        ...
+
+    async def disconnect(self) -> None:
+        """Close the database connection."""
+        ...
+
+    async def is_connected(self) -> bool:
+        """Check if the database connection is active."""
+        ...
+
+    async def get_schema(self) -> DatabaseSchema:
+        """Get the current database schema."""
+        ...
+
+@runtime_checkable
+class QueryEngine(Protocol):
+    """Protocol for natural language to SQL conversion."""
+    async def generate_sql(self, 
+                         natural_query: str, 
+                         schema: DatabaseSchema,
+                         context: Optional[Dict[str, Any]] = None) -> str:
+        """Convert natural language query to SQL."""
+        ...
+
+    async def validate_sql(self, sql_query: str, schema: DatabaseSchema) -> bool:
+        """Validate if the SQL query is valid for the given schema."""
+        ...
+
+@runtime_checkable
+class SQLExecutor(Protocol):
+    """Protocol for SQL query execution."""
+    async def execute_query(self, sql_query: str) -> QueryResult:
+        """Execute a SQL query and return the results."""
+        ...
+
+    async def execute_batch(self, queries: List[str]) -> List[QueryResult]:
+        """Execute multiple SQL queries in a batch."""
+        ...
+
+@runtime_checkable
+class ResultFormatter(Protocol):
+    """Protocol for formatting query results."""
+    def format_result(self, 
+                     result: QueryResult,
+                     format_type: str = "text",
+                     **kwargs: Any) -> str:
+        """Format the query result in the specified format."""
+        ...
+
+    def get_supported_formats(self) -> List[str]:
+        """Get list of supported output formats."""
+        ... 
+
+
+
+// Relative Path: core\models.py
+
+
+
+
+// Relative Path: core\schema.py
+
+"""Models for representing database schema information."""
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+class Column(BaseModel):
+    """Represents a database column."""
+    name: str = Field(..., description="Column name")
+    data_type: str = Field(..., description="SQL data type")
+    is_nullable: bool = Field(default=True, description="Whether the column can be NULL")
+    is_primary: bool = Field(default=False, description="Whether the column is part of primary key")
+    is_foreign: bool = Field(default=False, description="Whether the column is a foreign key")
+    references: Optional[str] = Field(default=None, description="Referenced table.column if foreign key")
+    description: Optional[str] = Field(default=None, description="Column description/comment")
+
+
+class Table(BaseModel):
+    """Represents a database table."""
+    name: str = Field(..., description="Table name")
+    schema: str = Field(default="public", description="Schema name")
+    columns: List[Column] = Field(default_factory=list, description="List of columns")
+    description: Optional[str] = Field(default=None, description="Table description/comment")
+    primary_keys: List[str] = Field(default_factory=list, description="List of primary key column names")
+    foreign_keys: List[str] = Field(default_factory=list, description="List of foreign key column names")
+    indexes: List[str] = Field(default_factory=list, description="List of indexed column names")
+
+
+class DatabaseSchema(BaseModel):
+    """Represents the complete database schema."""
+    tables: List[Table] = Field(default_factory=list, description="List of tables")
+    relationships: List[dict] = Field(default_factory=list, description="List of table relationships")
+    last_updated: Optional[str] = Field(default=None, description="Timestamp of last schema update")
+
+    def get_table(self, table_name: str) -> Optional[Table]:
+        """Get table by name."""
+        for table in self.tables:
+            if table.name == table_name:
+                return table
+        return None
+
+    def get_column(self, table_name: str, column_name: str) -> Optional[Column]:
+        """Get column by table and column name."""
+        table = self.get_table(table_name)
+        if table:
+            for column in table.columns:
+                if column.name == column_name:
+                    return column
+        return None 
+
+
+
+// Relative Path: core\sqlite.py
+
+"""SQLite implementations of database interfaces."""
+import sqlite3
+import aiosqlite
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+from .base import BaseDatabaseConnector, BaseSchemaLoader, BaseSQLExecutor
+from .interfaces import DatabaseSchema, QueryResult
+from .schema import Column, Table
+from .exceptions import SchemaError, ConnectionError, QueryExecutionError
+
+
+class SQLiteSchemaLoader(BaseSchemaLoader):
+    """Schema loader implementation for SQLite databases."""
+
+    async def _fetch_schema(self, connection_string: str) -> DatabaseSchema:
+        """Fetch schema from SQLite database."""
+        path = self._parse_connection_string(connection_string)
+        tables = []
+        
+        async with aiosqlite.connect(path) as conn:
+            # Get all tables
+            async with conn.execute(
+                """
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                """
+            ) as cursor:
+                table_names = await cursor.fetchall()
+
+            for (table_name,) in table_names:
+                # Get table info
+                async with conn.execute(f"PRAGMA table_info({table_name})") as cursor:
+                    columns_info = await cursor.fetchall()
+                
+                # Get foreign keys
+                async with conn.execute(f"PRAGMA foreign_key_list({table_name})") as cursor:
+                    fk_info = await cursor.fetchall()
+
+                # Process columns
+                columns = []
+                primary_keys = []
+                foreign_keys = []
+                
+                # Create a mapping of foreign keys
+                fk_map: Dict[str, Tuple[str, str]] = {
+                    row[3]: (row[2], row[4])  # from_col: (table, to_col)
+                    for row in fk_info
+                }
+
+                for col in columns_info:
+                    # col: (cid, name, type, notnull, dflt_value, pk)
+                    is_primary = bool(col[5])
+                    col_name = col[1]
+                    
+                    if is_primary:
+                        primary_keys.append(col_name)
+                    
+                    if col_name in fk_map:
+                        foreign_keys.append(col_name)
+                        ref_table, ref_col = fk_map[col_name]
+                        references = f"{ref_table}.{ref_col}"
+                    else:
+                        references = None
+
+                    columns.append(Column(
+                        name=col_name,
+                        data_type=col[2],
+                        is_nullable=not bool(col[3]),
+                        is_primary=is_primary,
+                        is_foreign=col_name in fk_map,
+                        references=references
+                    ))
+
+                # Get table description from sqlite_master
+                async with conn.execute(
+                    """
+                    SELECT sql FROM sqlite_master 
+                    WHERE type='table' AND name=?
+                    """, (table_name,)
+                ) as cursor:
+                    create_sql = (await cursor.fetchone())[0]
+
+                tables.append(Table(
+                    name=table_name,
+                    columns=columns,
+                    primary_keys=primary_keys,
+                    foreign_keys=foreign_keys,
+                    description=create_sql
+                ))
+
+        # Build relationships
+        relationships = []
+        for table in tables:
+            for column in table.columns:
+                if column.references:
+                    ref_table, ref_col = column.references.split('.')
+                    relationships.append({
+                        'from_table': table.name,
+                        'to_table': ref_table,
+                        'from_column': column.name,
+                        'to_column': ref_col,
+                        'type': 'many_to_one'  # SQLite only supports this type
+                    })
+
+        return DatabaseSchema(
+            tables=tables,
+            relationships=relationships
+        )
+
+    def _parse_connection_string(self, connection_string: str) -> str:
+        """Parse SQLite connection string to get database path."""
+        if connection_string.startswith('sqlite:///'):
+            return urlparse(connection_string).path
+        return connection_string
+
+
+class SQLiteConnector(BaseDatabaseConnector):
+    """Database connector implementation for SQLite."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._schema_loader = SQLiteSchemaLoader()
+
+    async def _establish_connection(self, connection_string: str) -> aiosqlite.Connection:
+        """Establish SQLite connection."""
+        try:
+            path = self._schema_loader._parse_connection_string(connection_string)
+            conn = await aiosqlite.connect(path)
+            await conn.execute("PRAGMA foreign_keys = ON")
+            return conn
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to SQLite database: {str(e)}")
+
+    async def _close_connection(self) -> None:
+        """Close SQLite connection."""
+        if self._connection:
+            await self._connection.close()
+
+
+class SQLiteExecutor(BaseSQLExecutor):
+    """SQL executor implementation for SQLite."""
+
+    async def execute_query(self, sql_query: str) -> QueryResult:
+        """Execute a SQL query on SQLite database."""
+        if not isinstance(self._connector, SQLiteConnector):
+            raise QueryExecutionError("SQLiteExecutor requires SQLiteConnector")
+
+        if not self._connector.is_connected():
+            raise ConnectionError("Database connection is not established")
+
+        try:
+            start_time = time.time()
+            conn = self._connector._connection
+            
+            async with conn.execute(sql_query) as cursor:
+                # For SELECT queries
+                if sql_query.strip().upper().startswith('SELECT'):
+                    rows = await cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    affected_rows = len(rows)
+                else:
+                    # For INSERT, UPDATE, DELETE queries
+                    rows = []
+                    columns = []
+                    affected_rows = cursor.rowcount
+
+                execution_time = time.time() - start_time
+
+                return QueryResult(
+                    columns=columns,
+                    rows=rows,
+                    affected_rows=affected_rows,
+                    execution_time=execution_time,
+                    query=sql_query
+                )
+
+        except Exception as e:
+            raise QueryExecutionError(f"Failed to execute query: {str(e)}") 
+
+
+
+// Relative Path: core\__init__.py
+
+
+
+
+// Relative Path: db\connector.py
+
+
+
+
+// Relative Path: db\schema_loader.py
+
+
+
+
+// Relative Path: db\__init__.py
+
+
+
+
+// Relative Path: execution\executor.py
+
+
+
+
+// Relative Path: execution\__init__.py
+
+
+
+
+// Relative Path: formatters\base.py
+
+"""Base formatter for SQL query results."""
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Union
+
+from ..core.exceptions import FormattingError
+
+
+class BaseFormatter(ABC):
+    """Base class for all result formatters."""
+
+    @abstractmethod
+    async def format(self, result: Any) -> str:
+        """Format the query result.
+        
+        Args:
+            result: The query result to format.
+            
+        Returns:
+            The formatted result as a string.
+            
+        Raises:
+            FormattingError: If formatting fails.
+        """
+        pass
+
+    @abstractmethod
+    async def format_error(self, error: Exception) -> str:
+        """Format an error message.
+        
+        Args:
+            error: The error to format.
+            
+        Returns:
+            The formatted error message as a string.
+        """
+        pass 
+
+
+
+// Relative Path: formatters\csv.py
+
+"""CSV formatter for SQL query results."""
+import csv
+import io
+import logging
+from typing import Any, Dict, List, Optional, Union
+
+from ..core.exceptions import FormattingError
+from .base import BaseFormatter
+
+logger = logging.getLogger(__name__)
+
+
+class CSVFormatter(BaseFormatter):
+    """Formatter for CSV output."""
+
+    def __init__(self, delimiter: str = ",", quotechar: str = '"', 
+                 quoting: int = csv.QUOTE_MINIMAL, lineterminator: str = "\n"):
+        """Initialize the CSV formatter.
+        
+        Args:
+            delimiter: Field delimiter.
+            quotechar: Character used for quoting fields.
+            quoting: Quoting mode (csv.QUOTE_* constants).
+            lineterminator: Line terminator.
+        """
+        self.delimiter = delimiter
+        self.quotechar = quotechar
+        self.quoting = quoting
+        self.lineterminator = lineterminator
+
+    async def format(self, result: Any) -> str:
+        """Format the query result as CSV.
+        
+        Args:
+            result: The query result to format.
+            
+        Returns:
+            The formatted result as a CSV string.
+            
+        Raises:
+            FormattingError: If formatting fails.
+        """
+        try:
+            if result is None or result == []:
+                return self._format_message("No results")
+                
+            if not isinstance(result, dict) or "columns" not in result or "rows" not in result:
+                return self._format_message("Invalid result format")
+                
+            # Write to a string buffer
+            output = io.StringIO()
+            writer = csv.writer(
+                output,
+                delimiter=self.delimiter,
+                quotechar=self.quotechar,
+                quoting=self.quoting,
+                lineterminator=self.lineterminator
+            )
+            
+            # Write header
+            writer.writerow(result["columns"])
+            
+            # Write data rows
+            for row in result["rows"]:
+                writer.writerow(row)
+            
+            return output.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Error formatting result as CSV: {str(e)}")
+            raise FormattingError(f"Failed to format result as CSV: {str(e)}")
+
+    async def format_error(self, error: Exception) -> str:
+        """Format an error message as CSV.
+        
+        Args:
+            error: The error to format.
+            
+        Returns:
+            The formatted error message as a CSV string.
+        """
+        output = io.StringIO()
+        writer = csv.writer(
+            output,
+            delimiter=self.delimiter,
+            quotechar=self.quotechar,
+            quoting=self.quoting,
+            lineterminator=self.lineterminator
+        )
+        
+        writer.writerow(["error"])
+        writer.writerow([str(error)])
+        
+        return output.getvalue()
+
+    def _format_message(self, message: str) -> str:
+        """Format a simple message as CSV.
+        
+        Args:
+            message: The message to format.
+            
+        Returns:
+            The formatted message as a CSV string.
+        """
+        output = io.StringIO()
+        writer = csv.writer(
+            output,
+            delimiter=self.delimiter,
+            quotechar=self.quotechar,
+            quoting=self.quoting,
+            lineterminator=self.lineterminator
+        )
+        
+        writer.writerow(["message"])
+        writer.writerow([message])
+        
+        return output.getvalue()
+
+    def _prepare_rows(self, result: Any) -> List[Dict[str, Any]]:
+        """Prepare rows for CSV formatting.
+        
+        Args:
+            result: The result to prepare.
+            
+        Returns:
+            A list of dictionaries representing rows.
+        """
+        if isinstance(result, dict):
+            # Single row
+            return [result]
+        elif isinstance(result, list):
+            if not result:
+                return []
+            elif all(isinstance(item, dict) for item in result):
+                # List of dictionaries
+                return result
+            else:
+                # List of non-dictionary items
+                return [{"value": item} for item in result]
+        else:
+            # Single value
+            return [{"value": result}] 
+
+
+
+// Relative Path: formatters\factory.py
+
+"""Factory for creating formatters."""
+from typing import Dict, Optional, Type
+
+from ..core.exceptions import FormattingError
+from .base import BaseFormatter
+from .csv import CSVFormatter
+from .json import JSONFormatter
+from .text import TextFormatter
+
+
+class FormatterFactory:
+    """Factory for creating formatters."""
+
+    # Registry of available formatters
+    _formatters: Dict[str, Type[BaseFormatter]] = {
+        "text": TextFormatter,
+        "json": JSONFormatter,
+        "csv": CSVFormatter
+    }
+
+    @classmethod
+    def create(cls, format_type: str, **kwargs) -> BaseFormatter:
+        """Create a formatter of the specified type.
+        
+        Args:
+            format_type: The type of formatter to create.
+            **kwargs: Additional arguments to pass to the formatter constructor.
+            
+        Returns:
+            A formatter instance.
+            
+        Raises:
+            FormattingError: If the formatter type is not supported.
+        """
+        formatter_class = cls._formatters.get(format_type.lower())
+        if not formatter_class:
+            raise FormattingError(f"Unsupported formatter type: {format_type}")
+            
+        return formatter_class(**kwargs)
+
+    @classmethod
+    def register(cls, name: str, formatter_class: Type[BaseFormatter]) -> None:
+        """Register a new formatter type.
+        
+        Args:
+            name: The name of the formatter type.
+            formatter_class: The formatter class to register.
+        """
+        cls._formatters[name.lower()] = formatter_class
+
+    @classmethod
+    def get_available_formats(cls) -> list:
+        """Get a list of available formatter types.
+        
+        Returns:
+            A list of formatter type names.
+        """
+        return list(cls._formatters.keys()) 
+
+
+
+// Relative Path: formatters\json.py
+
+"""JSON formatter for SQL query results."""
+import json
+import logging
+from typing import Any, Dict, List, Optional, Union
+
+from ..core.exceptions import FormattingError
+from .base import BaseFormatter
+
+logger = logging.getLogger(__name__)
+
+
+class JSONFormatter(BaseFormatter):
+    """Formatter for JSON output."""
+
+    def __init__(self, indent: int = 2, ensure_ascii: bool = False):
+        """Initialize the JSON formatter.
+        
+        Args:
+            indent: Number of spaces for indentation.
+            ensure_ascii: Whether to ensure ASCII-only output.
+        """
+        self.indent = indent
+        self.ensure_ascii = ensure_ascii
+
+    async def format(self, result: Any) -> str:
+        """Format the query result as JSON.
+        
+        Args:
+            result: The query result to format.
+            
+        Returns:
+            The formatted result as a JSON string.
+            
+        Raises:
+            FormattingError: If formatting fails.
+        """
+        try:
+            # Handle None and empty lists
+            if result is None:
+                return json.dumps(
+                    {"result": None},
+                    indent=self.indent,
+                    ensure_ascii=self.ensure_ascii
+                )
+            elif result == []:
+                return json.dumps(
+                    {"result": []},
+                    indent=self.indent,
+                    ensure_ascii=self.ensure_ascii
+                )
+            
+            # Convert result to a serializable format
+            serializable_result = self._make_serializable(result)
+            
+            # Format as JSON
+            return json.dumps(
+                serializable_result,
+                indent=self.indent,
+                ensure_ascii=self.ensure_ascii
+            )
+            
+        except Exception as e:
+            logger.error(f"Error formatting result as JSON: {str(e)}")
+            raise FormattingError(f"Failed to format result as JSON: {str(e)}")
+
+    async def format_error(self, error: Exception) -> str:
+        """Format an error message as JSON.
+        
+        Args:
+            error: The error to format.
+            
+        Returns:
+            The formatted error message as a JSON string.
+        """
+        error_dict = {
+            "error": str(error),
+            "type": error.__class__.__name__
+        }
+        
+        return json.dumps(
+            error_dict,
+            indent=self.indent,
+            ensure_ascii=self.ensure_ascii
+        )
+
+    def _make_serializable(self, obj: Any) -> Any:
+        """Convert an object to a JSON-serializable format.
+        
+        Args:
+            obj: The object to convert.
+            
+        Returns:
+            A JSON-serializable version of the object.
+        """
+        if obj is None:
+            return None
+        elif isinstance(obj, (str, int, float, bool)):
+            return obj
+        elif isinstance(obj, (list, tuple)):
+            return [self._make_serializable(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {str(k): self._make_serializable(v) for k, v in obj.items()}
+        else:
+            # Try to convert to a string representation
+            return str(obj) 
+
+
+
+// Relative Path: formatters\markdown.py
+
+"""Markdown formatter module."""
+from typing import Any, Optional
+
+from .base import BaseFormatter
+
+
+class MarkdownFormatter(BaseFormatter):
+    """Formatter that outputs results as markdown."""
+    
+    def format(self, result: Any) -> str:
+        """Format a result as markdown.
+        
+        Args:
+            result: The result to format
+            
+        Returns:
+            str: The formatted result as markdown
+        """
+        if result is None:
+            return "## No Results\n\nNo results found."
+            
+        if isinstance(result, (list, tuple)):
+            if not result:
+                return "## No Results\n\nNo results found."
+            return self._format_list(result)
+            
+        if isinstance(result, dict):
+            return self._format_dict(result)
+            
+        return f"## Result\n\n{str(result)}"
+        
+    def format_error(self, error: Exception) -> str:
+        """Format an error as markdown.
+        
+        Args:
+            error: The error to format
+            
+        Returns:
+            str: The formatted error as markdown
+        """
+        return f"## Error\n\n{str(error)}"
+        
+    def _format_list(self, items: list) -> str:
+        """Format a list as markdown.
+        
+        Args:
+            items: The list to format
+            
+        Returns:
+            str: The formatted list as markdown
+        """
+        if not items:
+            return "## No Results\n\nNo results found."
+            
+        if isinstance(items[0], dict):
+            # Format as table
+            headers = list(items[0].keys())
+            header_row = "| " + " | ".join(headers) + " |"
+            separator = "| " + " | ".join(["---"] * len(headers)) + " |"
+            rows = []
+            for item in items:
+                row = "| " + " | ".join(str(item.get(h, "")) for h in headers) + " |"
+                rows.append(row)
+            return "## Results\n\n" + "\n".join([header_row, separator] + rows)
+            
+        # Format as bullet points
+        return "## Results\n\n" + "\n".join(f"- {item}" for item in items)
+        
+    def _format_dict(self, data: dict) -> str:
+        """Format a dictionary as markdown.
+        
+        Args:
+            data: The dictionary to format
+            
+        Returns:
+            str: The formatted dictionary as markdown
+        """
+        return "## Result\n\n" + "\n".join(f"**{k}**: {v}" for k, v in data.items()) 
+
+
+
+// Relative Path: formatters\text.py
+
+"""Text formatter for SQL query results."""
+import logging
+from typing import Any, Dict, List, Optional, Union
+
+from ..core.exceptions import FormattingError
+from .base import BaseFormatter
+
+logger = logging.getLogger(__name__)
+
+
+class TextFormatter(BaseFormatter):
+    """Formatter for human-readable text output."""
+
+    def __init__(self, max_width: int = 80, truncate: bool = True):
+        """Initialize the text formatter.
+        
+        Args:
+            max_width: Maximum width for text output.
+            truncate: Whether to truncate long values.
+        """
+        self.max_width = max_width
+        self.truncate = truncate
+
+    async def format(self, result: Any) -> str:
+        """Format the query result as readable text.
+        
+        Args:
+            result: The query result to format.
+            
+        Returns:
+            The formatted result as a string.
+            
+        Raises:
+            FormattingError: If formatting fails.
+        """
+        try:
+            if result is None:
+                return "No results returned."
+                
+            if isinstance(result, list):
+                return self._format_list(result)
+            elif isinstance(result, dict):
+                return self._format_dict(result)
+            else:
+                return str(result)
+                
+        except Exception as e:
+            logger.error(f"Error formatting result: {str(e)}")
+            raise FormattingError(f"Failed to format result: {str(e)}")
+
+    async def format_error(self, error: Exception) -> str:
+        """Format an error message as readable text.
+        
+        Args:
+            error: The error to format.
+            
+        Returns:
+            The formatted error message as a string.
+        """
+        return f"Error: {str(error)}"
+
+    def _format_list(self, result_list: List[Any]) -> str:
+        """Format a list of results.
+        
+        Args:
+            result_list: The list of results to format.
+            
+        Returns:
+            The formatted list as a string.
+        """
+        if not result_list:
+            return "No results returned."
+            
+        # Check if all items are dictionaries with the same keys
+        if all(isinstance(item, dict) for item in result_list):
+            # Format as a table
+            return self._format_table(result_list)
+        else:
+            # Format as a simple list
+            return "\n".join([str(item) for item in result_list])
+
+    def _format_dict(self, result_dict: Dict[str, Any]) -> str:
+        """Format a dictionary result.
+        
+        Args:
+            result_dict: The dictionary to format.
+            
+        Returns:
+            The formatted dictionary as a string.
+        """
+        if not result_dict:
+            return "No results returned."
+            
+        lines = []
+        for key, value in result_dict.items():
+            if self.truncate and isinstance(value, str) and len(value) > self.max_width:
+                value = value[:self.max_width - 3] + "..."
+            lines.append(f"{key}: {value}")
+            
+        return "\n".join(lines)
+
+    def _format_table(self, rows: List[Dict[str, Any]]) -> str:
+        """Format a list of dictionaries as a table.
+        
+        Args:
+            rows: The rows to format as a table.
+            
+        Returns:
+            The formatted table as a string.
+        """
+        if not rows:
+            return "No results returned."
+            
+        # Get all unique keys
+        keys = set()
+        for row in rows:
+            keys.update(row.keys())
+        keys = sorted(list(keys))
+        
+        # Calculate column widths
+        widths = {key: len(str(key)) for key in keys}
+        for row in rows:
+            for key in keys:
+                value = str(row.get(key, ""))
+                if self.truncate and len(value) > self.max_width:
+                    value = value[:self.max_width - 3] + "..."
+                widths[key] = max(widths[key], len(value))
+        
+        # Create header
+        header = " | ".join(key.ljust(widths[key]) for key in keys)
+        separator = "-+-".join("-" * widths[key] for key in keys)
+        
+        # Create rows
+        formatted_rows = []
+        for row in rows:
+            formatted_row = " | ".join(
+                str(row.get(key, "")).ljust(widths[key])[:widths[key]]
+                for key in keys
+            )
+            formatted_rows.append(formatted_row)
+        
+        # Combine all parts
+        return "\n".join([header, separator] + formatted_rows) 
+
+
+
+// Relative Path: formatters\__init__.py
+
+"""Formatters for SQL query results.""" 
+
+
+
+// Relative Path: tests\create_test_db.py
+
+"""Create a test database with sample data."""
+import os
+import sqlite3
+import csv
+from pathlib import Path
+from typing import Optional
+
+def parse_german_number(value: str) -> Optional[float]:
+    """Parse a number in German format (e.g., '1.234,56' -> 1234.56)."""
+    try:
+        # Remove any whitespace and quotes
+        value = value.strip().strip('"')
+        # Replace dots with nothing (thousand separators)
+        value = value.replace(".", "")
+        # Replace comma with dot (decimal separator)
+        value = value.replace(",", ".")
+        return float(value)
+    except (ValueError, AttributeError):
+        return None
+
+def create_test_db(db_path: str) -> None:
+    """Create a test database with sample data.
+    
+    Args:
+        db_path: Path to the SQLite database file
+    """
+    # Remove existing database if it exists
+    try:
+        if os.path.exists(db_path):
+            os.remove(db_path)
+    except PermissionError:
+        print(f"Warning: Could not remove existing database at {db_path}. It may be in use.")
+        # Try to close any open connections
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.close()
+        except:
+            pass
+        try:
+            os.remove(db_path)
+        except:
+            print(f"Warning: Still could not remove database at {db_path}")
+            return
+    
+    # Create database and tables
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Create transactions table
+    cursor.execute("""
+    CREATE TABLE transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        period TEXT NOT NULL,
+        customer TEXT NOT NULL,
+        amount REAL NOT NULL,
+        credit_limit REAL,
+        revenue_relevant TEXT,
+        transaction_type TEXT,
+        description TEXT
+    )
+    """)
+    
+    # Read test data from CSV
+    csv_path = Path(__file__).parent.parent.parent / "documents" / "text2sql_testdata.csv"
+    
+    try:
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    # Map German column names to English
+                    amount = parse_german_number(row["Rechenbetrag"])
+                    credit_limit = parse_german_number(row.get("Personenkonto Kreditlimit", ""))
+                    
+                    if amount is None:
+                        print(f"Warning: Skipping row due to error: Could not parse number: {row['Rechenbetrag']}")
+                        continue
+                    
+                    cursor.execute(
+                        """
+                        INSERT INTO transactions (
+                            period, customer, amount, credit_limit,
+                            revenue_relevant, transaction_type, description
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            row["Periode"],
+                            row["Personenkonto Bezeichnung"],
+                            amount,
+                            credit_limit,
+                            row.get("Umsatzrelevant", ""),
+                            row.get("Datenart", ""),
+                            row.get("Personenkonto Art", "")
+                        )
+                    )
+                except sqlite3.Error as e:
+                    print(f"Warning: Error inserting row: {e}")
+                    continue
+    except UnicodeDecodeError:
+        # Try with a different encoding if UTF-8 fails
+        with open(csv_path, "r", encoding="latin1") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    # Map German column names to English
+                    amount = parse_german_number(row["Rechenbetrag"])
+                    credit_limit = parse_german_number(row.get("Personenkonto Kreditlimit", ""))
+                    
+                    if amount is None:
+                        print(f"Warning: Skipping row due to error: Could not parse number: {row['Rechenbetrag']}")
+                        continue
+                    
+                    cursor.execute(
+                        """
+                        INSERT INTO transactions (
+                            period, customer, amount, credit_limit,
+                            revenue_relevant, transaction_type, description
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            row["Periode"],
+                            row["Personenkonto Bezeichnung"],
+                            amount,
+                            credit_limit,
+                            row.get("Umsatzrelevant", ""),
+                            row.get("Datenart", ""),
+                            row.get("Personenkonto Art", "")
+                        )
+                    )
+                except sqlite3.Error as e:
+                    print(f"Warning: Error inserting row: {e}")
+                    continue
+    
+    # Create indexes
+    cursor.execute("CREATE INDEX idx_period ON transactions(period)")
+    cursor.execute("CREATE INDEX idx_customer ON transactions(customer)")
+    cursor.execute("CREATE INDEX idx_revenue_relevant ON transactions(revenue_relevant)")
+    
+    # Commit and close
+    conn.commit()
+    conn.close()
+
+if __name__ == "__main__":
+    create_test_db() 
+
+
+
+// Relative Path: tests\test_agent.py
+
+
+
+
+// Relative Path: tests\test_connector.py
+
+
+
+
+// Relative Path: tests\test_database.py
+
+"""Tests for the test database creation and basic queries."""
+import os
+import sqlite3
+from pathlib import Path
+from .create_test_db import create_test_db
+
+# Define the database path locally
+DB_PATH = Path("test.db")
+
+def test_database_creation():
+    """Test that the database is created correctly."""
+    # Create the database
+    create_test_db(str(DB_PATH))
+    
+    # Verify the database exists
+    assert DB_PATH.exists(), "Database file was not created"
+    
+    # Connect to the database
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Test table structure
+    cursor.execute("PRAGMA table_info(transactions)")
+    columns = cursor.fetchall()
+    assert len(columns) == 8, "Wrong number of columns"
+    
+    # Test data insertion
+    cursor.execute("SELECT COUNT(*) FROM transactions")
+    count = cursor.fetchone()[0]
+    assert count > 0, "No records were inserted"
+    
+    # Test indexes
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
+    indexes = cursor.fetchall()
+    assert len(indexes) >= 3, "Not all indexes were created"
+    
+    # Test a basic query
+    cursor.execute("""
+    SELECT customer, period, amount 
+    FROM transactions 
+    WHERE revenue_relevant = 'Ja' 
+    ORDER BY period DESC 
+    LIMIT 5
+    """)
+    results = cursor.fetchall()
+    assert len(results) > 0, "No results found for revenue_relevant = 'Ja'"
+    
+    # Close connection
+    conn.close()
+
+def test_data_integrity():
+    """Test that the data was imported correctly."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Test specific values
+    cursor.execute("""
+    SELECT customer, amount 
+    FROM transactions 
+    WHERE customer = 'Musterdebitor Gewo GmbH' 
+    AND period = '2024/09'
+    """)
+    results = cursor.fetchall()
+    assert len(results) > 0, "No data found for Musterdebitor Gewo GmbH in 2024/09"
+    
+    # Test data types
+    cursor.execute("""
+    SELECT amount, credit_limit 
+    FROM transactions 
+    LIMIT 1
+    """)
+    row = cursor.fetchone()
+    assert isinstance(row[0], float), "Amount is not a float"
+    assert isinstance(row[1], float), "Credit limit is not a float"
+    
+    conn.close()
+
+if __name__ == "__main__":
+    test_database_creation()
+    test_data_integrity()
+    print("All tests passed!") 
+
+
+
+// Relative Path: tests\test_executor.py
+
+
+
+
+// Relative Path: tests\test_formatters.py
+
+"""Tests for the formatters."""
+import json
+import pytest
+import csv
+import io
+from typing import Dict, List, Any
+
+from ..formatters.factory import FormatterFactory
+from ..formatters.text import TextFormatter
+from ..formatters.json import JSONFormatter
+from ..formatters.csv import CSVFormatter
+from ..core.exceptions import FormattingError
+
+
+# Sample test data
+SAMPLE_RESULT = {
+    "columns": ["id", "period", "customer", "amount", "credit_limit", "revenue_relevant", "account_type", "account_description"],
+    "rows": [
+        (1, "2020/01", "Musterdebitor Gewo GmbH", 1000.0, 700.0, "Nein", "Ist", "Debitor"),
+        (2, "2020/02", "Musterdebitor Gewo GmbH", -500.0, 700.0, "Ja", "Ist", "Debitor"),
+        (3, "2020/03", "Musterdebitor Gewo GmbH", 2000.0, 700.0, "Nein", "Ist", "Debitor"),
+    ],
+    "affected_rows": 3,
+    "execution_time": 0.05,
+    "query": "SELECT * FROM transactions WHERE customer = 'Musterdebitor Gewo GmbH'"
+}
+
+SAMPLE_ERROR = ValueError("Invalid query: Table 'nonexistent' does not exist")
+
+
+@pytest.mark.asyncio
+async def test_formatter_factory():
+    """Test the formatter factory."""
+    # Test creating formatters
+    text_formatter = FormatterFactory.create("text")
+    json_formatter = FormatterFactory.create("json")
+    csv_formatter = FormatterFactory.create("csv")
+    
+    assert isinstance(text_formatter, TextFormatter)
+    assert isinstance(json_formatter, JSONFormatter)
+    assert isinstance(csv_formatter, CSVFormatter)
+    
+    # Test unsupported formatter
+    with pytest.raises(FormattingError):
+        FormatterFactory.create("unsupported")
+    
+    # Test available formats
+    available_formats = FormatterFactory.get_available_formats()
+    assert "text" in available_formats
+    assert "json" in available_formats
+    assert "csv" in available_formats
+
+
+@pytest.mark.asyncio
+async def test_text_formatter():
+    """Test the text formatter."""
+    formatter = TextFormatter()
+    
+    # Test formatting result
+    formatted = await formatter.format(SAMPLE_RESULT)
+    assert isinstance(formatted, str)
+    assert "Musterdebitor" in formatted
+    assert "1000.0" in formatted
+    assert "-500.0" in formatted
+    assert "2000.0" in formatted
+    
+    # Test formatting error
+    error_formatted = await formatter.format_error(SAMPLE_ERROR)
+    assert isinstance(error_formatted, str)
+    assert "Invalid query" in error_formatted
+    
+    # Test formatting None
+    none_formatted = await formatter.format(None)
+    assert "No results" in none_formatted
+    
+    # Test formatting empty list
+    empty_formatted = await formatter.format([])
+    assert "No results" in empty_formatted
+
+
+@pytest.mark.asyncio
+async def test_json_formatter():
+    """Test the JSON formatter."""
+    formatter = JSONFormatter()
+    
+    # Test formatting result
+    formatted = await formatter.format(SAMPLE_RESULT)
+    assert isinstance(formatted, str)
+    
+    # Verify it's valid JSON
+    parsed = json.loads(formatted)
+    assert "columns" in parsed
+    assert "rows" in parsed
+    assert "affected_rows" in parsed
+    assert "execution_time" in parsed
+    assert "query" in parsed
+    
+    # Test formatting error
+    error_formatted = await formatter.format_error(SAMPLE_ERROR)
+    assert isinstance(error_formatted, str)
+    
+    # Verify error JSON
+    error_parsed = json.loads(error_formatted)
+    assert "error" in error_parsed
+    assert "Invalid query" in error_parsed["error"]
+    
+    # Test formatting None
+    none_formatted = await formatter.format(None)
+    none_parsed = json.loads(none_formatted)
+    assert "result" in none_parsed
+    assert none_parsed["result"] is None
+    
+    # Test formatting empty list
+    empty_formatted = await formatter.format([])
+    empty_parsed = json.loads(empty_formatted)
+    assert "result" in empty_parsed
+    assert empty_parsed["result"] == []
+
+
+@pytest.mark.asyncio
+async def test_csv_formatter():
+    """Test the CSV formatter."""
+    formatter = CSVFormatter()
+    
+    # Test formatting result
+    formatted = await formatter.format(SAMPLE_RESULT)
+    assert isinstance(formatted, str)
+    
+    # Verify it's valid CSV
+    csv_file = io.StringIO(formatted)
+    reader = csv.reader(csv_file)
+    rows = list(reader)
+    
+    # Check header row
+    assert len(rows) > 0
+    assert rows[0] == SAMPLE_RESULT["columns"]
+    
+    # Check data rows
+    assert len(rows) == len(SAMPLE_RESULT["rows"]) + 1  # +1 for header
+    
+    # Test formatting error
+    error_formatted = await formatter.format_error(SAMPLE_ERROR)
+    assert isinstance(error_formatted, str)
+    
+    # Verify error CSV
+    error_csv = io.StringIO(error_formatted)
+    error_reader = csv.reader(error_csv)
+    error_rows = list(error_reader)
+    assert len(error_rows) == 2  # Header + error message
+    assert error_rows[0] == ["error"]
+    assert "Invalid query" in error_rows[1][0]
+    
+    # Test formatting None
+    none_formatted = await formatter.format(None)
+    none_csv = io.StringIO(none_formatted)
+    none_reader = csv.reader(none_csv)
+    none_rows = list(none_reader)
+    assert len(none_rows) == 2  # Header + message
+    assert none_rows[0] == ["message"]
+    assert "No results" in none_rows[1][0]
+    
+    # Test formatting empty list
+    empty_formatted = await formatter.format([])
+    empty_csv = io.StringIO(empty_formatted)
+    empty_reader = csv.reader(empty_csv)
+    empty_rows = list(empty_reader)
+    assert len(empty_rows) == 2  # Header + message
+    assert empty_rows[0] == ["message"]
+    assert "No results" in empty_rows[1][0] 
+
+
+
+// Relative Path: tests\test_sql_agent.py
+
+"""Tests for the SQL agent implementation."""
+import os
+import pytest
+import pytest_asyncio
+import sqlite3
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+from ..agent.sql_agent import SQLAgent, QueryGenerationError
+from .create_test_db import create_test_db
+
+TEST_DB_PATH = "test.db"
+
+@pytest_asyncio.fixture(scope="function")
+async def test_db():
+    """Create a test database with transaction data."""
+    create_test_db(TEST_DB_PATH)
+    yield TEST_DB_PATH
+    try:
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
+    except PermissionError:
+        print(f"Warning: Could not remove test database at {TEST_DB_PATH}")
+
+@pytest_asyncio.fixture
+async def sql_agent(test_db):
+    """Create a SQL agent instance with test database."""
+    agent = SQLAgent(database_url=f"sqlite:///{test_db}")
+    return agent
+
+@pytest.mark.asyncio
+async def test_sql_agent_initialization(sql_agent):
+    """Test that SQL agent initializes correctly."""
+    assert sql_agent.sql_database is not None
+    assert sql_agent.query_engine is not None
+    table_info = sql_agent.get_table_info()
+    assert "transactions" in table_info.lower()
+
+@pytest.mark.asyncio
+async def test_basic_query(sql_agent):
+    """Test basic query execution."""
+    question = "What is the total amount for Musterdebitor Gewo GmbH?"
+    result = await sql_agent.query(question)
+    assert "answer" in result
+    assert "sql_query" in result
+    assert "result" in result
+    assert "select" in result["sql_query"].lower()
+    assert "musterdebitor" in result["sql_query"].lower()
+
+@pytest.mark.asyncio
+async def test_query_with_date_filter(sql_agent):
+    """Test query with date filtering."""
+    question = "Show transactions from January 2024"
+    result = await sql_agent.query(question)
+    assert any(term in result["sql_query"] for term in ["202401", "'January 2024'"])
+    assert result["result"] is not None
+
+@pytest.mark.skip(reason="LlamaIndex query engine is too robust to test invalid queries")
+@pytest.mark.asyncio
+async def test_invalid_query(sql_agent):
+    """Test handling of invalid queries."""
+    with pytest.raises(QueryGenerationError):
+        await sql_agent.query("Tell me a joke about SQL")
+
+@pytest.mark.asyncio
+async def test_get_table_info(sql_agent):
+    """Test retrieval of table information."""
+    table_info = sql_agent.get_table_info()
+    assert "transactions" in table_info.lower()
+    assert "amount" in table_info.lower()
+    assert "period" in table_info.lower()
+
+@pytest.mark.asyncio
+async def test_aggregation_query(sql_agent):
+    """Test query with aggregation."""
+    question = "What is the total amount of all transactions?"
+    result = await sql_agent.query(question)
+    assert "sum" in result["sql_query"].lower()
+    assert "amount" in result["sql_query"].lower()
+    assert result["result"] is not None 
+
+
+
+// Relative Path: tests\__init__.py
+
+
+
+
+// Relative Path: __init__.py
+
+"""Text2SQL - Convert natural language to SQL queries."""
+import asyncio
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
+
+from .agent.sql_agent import SQLAgent
+from .core.config import DatabaseConfig, LLMConfig, Text2SQLConfig
+from .core.exceptions import (
+    ConnectionError,
+    QueryExecutionError,
+    QueryGenerationError,
+    SchemaError,
+    Text2SQLError,
+)
+from .core.sqlite import SQLiteConnector, SQLiteExecutor, SQLiteSchemaLoader
+from .formatters.factory import FormatterFactory
+
+# Global configuration
+_config_path = Path.home() / ".text2sql" / "config.json"
+_config: Optional[Text2SQLConfig] = None
+
+
+def _load_config() -> Text2SQLConfig:
+    """Load configuration from file or create default."""
+    global _config
+    
+    if _config is not None:
+        return _config
+        
+    if _config_path.exists():
+        try:
+            with open(_config_path, "r") as f:
+                config_data = json.load(f)
+                _config = Text2SQLConfig(**config_data)
+                return _config
+        except Exception as e:
+            raise Text2SQLError(f"Error loading config: {str(e)}")
+    
+    # Create default config
+    _config = Text2SQLConfig(
+        database=DatabaseConfig(
+            type="sqlite",
+            path=":memory:",
+            username="",
+            password="",
+            host="",
+            port=0,
+        ),
+        llm=LLMConfig(
+            model_name="gpt-3.5-turbo",
+            temperature=0.0,
+            max_tokens=1000,
+            api_key=os.environ.get("OPENAI_API_KEY", ""),
+            timeout=30,
+        ),
+        output_format="text",
+    )
+    
+    # Save default config
+    _config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(_config_path, "w") as f:
+            json.dump(_config.dict(), f, indent=2)
+    except Exception as e:
+        # Just log the warning, don't fail
+        print(f"Warning: Could not save default config: {str(e)}")
+    
+    return _config
+
+
+def _save_config() -> None:
+    """Save current configuration to file."""
+    global _config
+    
+    if _config is None:
+        return
+        
+    _config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(_config_path, "w") as f:
+            json.dump(_config.dict(), f, indent=2)
+    except Exception as e:
+        raise Text2SQLError(f"Error saving config: {str(e)}")
+
+
+async def _initialize_components():
+    """Initialize database and agent components."""
+    cfg = _load_config()
+    
+    # Initialize database components
+    if cfg.database.type == "sqlite":
+        connector = SQLiteConnector(cfg.database)
+        executor = SQLiteExecutor(connector)
+    else:
+        raise ConnectionError(f"Unsupported database type: {cfg.database.type}")
+    
+    # Get database URL
+    db_url = connector.get_connection_string()
+    
+    # Initialize agent with database URL
+    agent = SQLAgent(db_url=db_url, llm=cfg.llm)
+    
+    return agent, executor
+
+
+class QueryResult:
+    """Result of a query execution."""
+    
+    def __init__(self, sql: str, result: Any, formatted_result: str):
+        """Initialize the query result.
+        
+        Args:
+            sql: The SQL query that was executed.
+            result: The raw query result.
+            formatted_result: The formatted query result.
+        """
+        self.sql = sql
+        self.result = result
+        self.formatted_result = formatted_result
+
+
+async def query(nl: str, format_type: Optional[str] = None) -> QueryResult:
+    """Convert a natural language question to SQL and execute it.
+    
+    Args:
+        nl: The natural language question.
+        format_type: The output format (text, json, csv). If None, uses the configured format.
+        
+    Returns:
+        A QueryResult object containing the SQL, raw result, and formatted result.
+        
+    Raises:
+        QueryGenerationError: If SQL generation fails.
+        QueryExecutionError: If SQL execution fails.
+        Text2SQLError: For other errors.
+    """
+    try:
+        # Load config and override format if specified
+        cfg = _load_config()
+        if format_type:
+            cfg.output_format = format_type
+            
+        # Initialize components
+        agent, executor = await _initialize_components()
+        
+        # Generate SQL
+        sql = await agent.generate_sql(nl)
+        
+        # Execute SQL
+        result = await executor.execute(sql)
+        
+        # Format result
+        formatter = FormatterFactory.create(cfg.output_format)
+        formatted_result = await formatter.format(result)
+        
+        return QueryResult(sql, result, formatted_result)
+        
+    except QueryGenerationError as e:
+        raise QueryGenerationError(f"Error generating SQL: {str(e)}")
+    except QueryExecutionError as e:
+        raise QueryExecutionError(f"Error executing SQL: {str(e)}")
+    except Text2SQLError as e:
+        raise Text2SQLError(f"Error: {str(e)}")
+
+
+async def explain(nl: str) -> str:
+    """Show the SQL that would be generated for a question without executing it.
+    
+    Args:
+        nl: The natural language question.
+        
+    Returns:
+        The generated SQL query.
+        
+    Raises:
+        QueryGenerationError: If SQL generation fails.
+        Text2SQLError: For other errors.
+    """
+    try:
+        # Initialize components
+        agent, _ = await _initialize_components()
+        
+        # Generate SQL
+        sql = await agent.generate_sql(nl)
+        
+        return sql
+        
+    except QueryGenerationError as e:
+        raise QueryGenerationError(f"Error generating SQL: {str(e)}")
+    except Text2SQLError as e:
+        raise Text2SQLError(f"Error: {str(e)}")
+
+
+def configure(config: Union[Text2SQLConfig, Dict[str, Any]]) -> None:
+    """Configure Text2SQL settings.
+    
+    Args:
+        config: A Text2SQLConfig object or a dictionary with configuration values.
+        
+    Raises:
+        Text2SQLError: If configuration fails.
+    """
+    global _config
+    
+    try:
+        if isinstance(config, dict):
+            # Update existing config with new values
+            current_config = _load_config()
+            for key, value in config.items():
+                if hasattr(current_config, key):
+                    setattr(current_config, key, value)
+            _config = current_config
+        else:
+            # Use the provided config
+            _config = config
+            
+        # Save the updated config
+        _save_config()
+        
+    except Exception as e:
+        raise Text2SQLError(f"Error configuring Text2SQL: {str(e)}")
+
+
+# For convenience, provide synchronous versions of the async functions
+def query_sync(nl: str, format_type: Optional[str] = None) -> QueryResult:
+    """Synchronous version of query."""
+    return asyncio.run(query(nl, format_type))
+
+
+def explain_sync(nl: str) -> str:
+    """Synchronous version of explain."""
+    return asyncio.run(explain(nl))
+
+
+__all__ = [
+    "query",
+    "query_sync",
+    "explain",
+    "explain_sync",
+    "configure",
+    "QueryResult",
+    "Text2SQLConfig",
+    "DatabaseConfig",
+    "LLMConfig",
+]
+
+
+
+

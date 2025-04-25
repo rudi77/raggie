@@ -1,0 +1,152 @@
+# Backend for the CxO Dashboard
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List
+from pydantic import BaseModel
+import random
+
+app = FastAPI()
+
+# CORS middleware setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
+class RevenueData(BaseModel):
+    month: str
+    revenue: int
+
+@app.get("/api/revenue", response_model=List[RevenueData])
+async def get_revenue():
+    return [
+        {"month": "Jan", "revenue": 2500},
+        {"month": "Feb", "revenue": 3200},
+        {"month": "Mar", "revenue": 2800},
+        {"month": "Apr", "revenue": 3600},
+        {"month": "Mai", "revenue": 3100},
+        {"month": "Jun", "revenue": 3800},
+    ]
+
+@app.get("/api/generated-code")
+async def get_generated_code():
+    # Randomly choose between table and chart
+    display_type = random.choice(["table", "chart"])
+    
+    if display_type == "table":
+        code = """function GeneratedTable() {
+  return React.createElement(
+    'div',
+    { style: { padding: '20px' } },
+    [
+      React.createElement(
+        'h2',
+        { 
+          style: { color: '#fff', marginBottom: '16px' },
+          key: 'title'
+        },
+        'Umsatzentwicklung 2024'
+      ),
+      React.createElement(
+        'table',
+        { 
+          style: { 
+            width: '100%',
+            borderCollapse: 'collapse',
+            color: '#fff'
+          },
+          key: 'table'
+        },
+        [
+          React.createElement(
+            'thead',
+            { key: 'thead' },
+            React.createElement(
+              'tr',
+              { key: 'header' },
+              [
+                React.createElement('th', { style: { padding: '12px', textAlign: 'left', borderBottom: '1px solid #4285f4' }, key: 'month' }, 'Monat'),
+                React.createElement('th', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid #4285f4' }, key: 'revenue' }, 'Umsatz')
+              ]
+            )
+          ),
+          React.createElement(
+            'tbody',
+            { key: 'tbody' },
+            [
+              React.createElement('tr', { key: '1' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month1' }, 'Januar'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue1' }, '€2.500')
+              ]),
+              React.createElement('tr', { key: '2' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month2' }, 'Februar'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue2' }, '€3.200')
+              ]),
+              React.createElement('tr', { key: '3' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month3' }, 'März'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue3' }, '€2.800')
+              ]),
+              React.createElement('tr', { key: '4' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month4' }, 'April'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue4' }, '€3.600')
+              ]),
+              React.createElement('tr', { key: '5' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month5' }, 'Mai'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue5' }, '€3.100')
+              ]),
+              React.createElement('tr', { key: '6' }, [
+                React.createElement('td', { style: { padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'month6' }, 'Juni'),
+                React.createElement('td', { style: { padding: '12px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }, key: 'revenue6' }, '€3.800')
+              ])
+            ]
+          )
+        ]
+      )
+    ]
+  );
+}
+
+exports.default = GeneratedTable;"""
+    else:
+        code = """function GeneratedChart() {
+  return React.createElement(
+    'div',
+    { style: { padding: '20px' } },
+    [
+      React.createElement(
+        'h2',
+        { 
+          style: { color: '#fff', marginBottom: '16px' },
+          key: 'title'
+        },
+        'Umsatzentwicklung 2024'
+      ),
+      React.createElement(
+        'ul',
+        { 
+          style: { color: '#fff', listStyle: 'none', padding: 0 },
+          key: 'list'
+        },
+        [
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '1' }, 'Jan: €2500'),
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '2' }, 'Feb: €3200'),
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '3' }, 'März: €2800'),
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '4' }, 'April: €3600'),
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '5' }, 'Mai: €3100'),
+          React.createElement('li', { style: { marginBottom: '8px' }, key: '6' }, 'Juni: €3800')
+        ]
+      )
+    ]
+  );
+}
+
+exports.default = GeneratedChart;"""
+    return {"code": code}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000) 

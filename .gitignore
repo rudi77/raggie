@@ -176,3 +176,9 @@ uv.lock
 data/
 documents/text2sql_testdata.csv
 test.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/package-lock.json
