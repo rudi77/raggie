@@ -12,13 +12,13 @@ async def main():
         return
 
     # Initialize OpenAI LLM with API key
-    llm = OpenAI(api_key=api_key)
+    llm = OpenAI(api_key=api_key, model="gpt-4o-mini")
     
     # Initialize the SQL agent with our test database and LLM
     agent = SQLAgent(database_url="sqlite:///test.db", llm=llm)
     
     # Try a summary query
-    question = "Show me the total amount of transactions per period for Musterdebitor Gewo GmbH"
+    question = "Gib mir für alle Kunden die Umsätze pro Periode aus"  # "Show me the total amount of transactions per period for Musterdebitor Gewo GmbH"
     try:
         result = await agent.query(question)
         print("\nQuestion:", question)
