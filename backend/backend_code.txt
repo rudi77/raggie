@@ -1,0 +1,363 @@
+
+// Relative Path: api\routes\text2sql.py
+
+# backend/api/routes/text2sql.py
+
+from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional, Any
+from pydantic import BaseModel
+import logging
+from ..dependencies import get_text2sql_service
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/text2sql", tags=["text2sql"])
+
+class QueryRequest(BaseModel):
+    question: str
+
+class QueryResponse(BaseModel):
+    sql: str
+    result: Any
+    formatted_result: str
+
+@router.post("/query", response_model=QueryResponse)
+async def execute_query(
+    request: QueryRequest,
+    text2sql_service = Depends(get_text2sql_service)
+):
+    try:
+        logger.info(f"Processing query request: {request}")
+        result = await text2sql_service.query(request.question)
+        logger.info(f"Query result: {result}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error processing query: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/explain")
+async def explain_query(
+    request: QueryRequest,
+    text2sql_service = Depends(get_text2sql_service)
+):
+    try:
+        logger.info(f"Processing explain request: {request}")
+        sql = await text2sql_service.explain(request.question)
+        logger.info(f"Explain result: {sql}")
+        return {"sql": sql}
+    except Exception as e:
+        logger.error(f"Error processing explain: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+// Relative Path: api\routes\__init__.py
+
+
+
+
+// Relative Path: api\dependencies.py
+
+# backend/api/dependencies.py
+
+from fastapi import Depends
+from ..services.text2sql_service import Text2SQLService
+from ..core.config import get_settings, Settings
+
+def get_text2sql_service(settings: Settings = Depends(get_settings)) -> Text2SQLService:
+    return Text2SQLService(
+        db_path=settings.database_path,
+        openai_api_key=settings.openai_api_key
+    )
+
+
+
+// Relative Path: api\sql_queries.py
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+router = APIRouter(prefix="/api/sql", tags=["sql"])
+
+class SQLQuery(BaseModel):
+    query: str
+    parameters: Optional[dict] = None
+
+class QueryResult(BaseModel):
+    timestamp: str
+    data: List[dict]
+    query: str
+
+@router.post("/execute", response_model=QueryResult)
+async def execute_sql_query(query: SQLQuery):
+    try:
+        # TODO: Integrate with Text2SQL agent
+        # For now, return mock data
+        return {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data": [
+                {"id": 1, "revenue": 15000, "month": "Januar"},
+                {"id": 2, "revenue": 17500, "month": "Februar"},
+                {"id": 3, "revenue": 21000, "month": "März"},
+            ],
+            "query": query.query
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tables")
+async def get_available_tables():
+    """Return list of available tables in the database"""
+    return {
+        "tables": [
+            {
+                "name": "bookings",
+                "columns": ["id", "date", "description", "category", "amount"]
+            },
+            {
+                "name": "revenue",
+                "columns": ["id", "month", "revenue", "year"]
+            }
+        ]
+    } 
+
+
+
+// Relative Path: api\__init__.py
+
+
+
+
+// Relative Path: core\config.py
+
+# backend/core/config.py
+
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+class Settings(BaseSettings):
+    database_path: str = "path/to/your/database.db"
+    openai_api_key: str
+
+    class Config:
+        env_file = ".env"
+
+    def __hash__(self):
+        return hash((self.database_path, self.openai_api_key))
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+
+
+
+// Relative Path: core\__init__.py
+
+
+
+
+// Relative Path: services\text2sql_service.py
+
+from typing import Optional, Any
+import asyncio
+import json
+from text2sql.agent.sql_agent import SQLAgent
+from llama_index.llms.openai import OpenAI
+
+class Text2SQLService:
+    def __init__(self, db_path: str, openai_api_key: str):
+        """Initialize Text2SQL service with configuration."""
+        # Initialize OpenAI LLM with API key
+        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o-mini")
+        
+        # Initialize the SQL agent with our database and LLM
+        self.agent = SQLAgent(database_url=f"sqlite:///{db_path}", llm=self.llm)
+
+    async def query(self, question: str) -> dict:
+        """Execute a natural language query."""
+        try:
+            # Use the agent's query method which returns a dictionary with sql_query, result, and answer
+            result = await self.agent.query(question)
+            
+            print("\nQuestion:", question)
+            print("\nSQL Query:", result["sql_query"])
+            print("\nAnswer:", result["answer"])
+            print("\nRaw Result:", result["result"])
+            
+            # Format the result as JSON string
+            formatted_result = json.dumps(result["result"], default=str)
+            
+            return {
+                "sql": result["sql_query"],
+                "result": result["result"],
+                "answer": result["answer"],
+                "formatted_result": formatted_result
+            }
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL query: {str(e)}")
+            raise
+
+    async def explain(self, question: str) -> str:
+        """Get SQL explanation for a question without executing it."""
+        # For now, we'll just return the SQL query without executing it
+        try:
+            # Use the agent's query method but only return the SQL part
+            result = await self.agent.query(question)
+            return result["sql_query"]
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL explain: {str(e)}")
+            raise
+
+
+
+// Relative Path: services\__init__.py
+
+
+
+
+// Relative Path: tests\conftest.py
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from backend.database import Base
+
+@pytest.fixture(scope="session")
+def test_db():
+    # Use SQLite in-memory database for testing
+    SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    # Create test database and tables
+    Base.metadata.create_all(bind=engine)
+    
+    # Create test data
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        # Clean up
+        Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture
+def example_fixture():
+    """
+    A basic fixture that returns a test string.
+    This fixture will be available to all test files in this directory.
+    """
+    return "example data" 
+
+
+
+// Relative Path: tests\test_example.py
+
+def test_example(example_fixture):
+    """Test that demonstrates using a fixture"""
+    assert isinstance(example_fixture, str)
+    assert example_fixture == "example data"
+
+def test_simple_assertion():
+    """Test that demonstrates a simple assertion"""
+    assert 1 + 1 == 2
+
+class TestExample:
+    """Example test class to demonstrate pytest class naming pattern."""
+    
+    def test_method(self):
+        """Example test method to demonstrate pytest method naming pattern."""
+        expected = "example"
+        actual = "example"
+        assert actual == expected 
+
+
+
+// Relative Path: tests\test_sql_queries.py
+
+from fastapi.testclient import TestClient
+from backend.main import app
+import pytest
+
+client = TestClient(app)
+
+def test_tables_endpoint():
+    response = client.get("/api/sql/tables")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert all("name" in table and "columns" in table for table in data)
+
+def test_execute_valid_query():
+    query = {
+        "query": "SELECT * FROM bookings",
+        "parameters": {}
+    }
+    response = client.post("/api/sql/execute", json=query)
+    assert response.status_code == 200
+    data = response.json()
+    assert "timestamp" in data
+    assert "data" in data
+    assert "query" in data
+    assert isinstance(data["data"], list)
+
+def test_execute_invalid_query():
+    query = {
+        "query": "INVALID SQL QUERY",
+        "parameters": {}
+    }
+    response = client.post("/api/sql/execute", json=query)
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data 
+
+
+
+// Relative Path: main.py
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+import uvicorn
+from .api.routes import text2sql
+
+app = FastAPI(
+    title="cxo API",
+    description="Backend API for cxo",
+    version="0.1.0"
+)
+
+# CORS middleware configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include Text2SQL routes
+app.include_router(text2sql.router)
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+
+
+
+// Relative Path: __init__.py
+
+
+
+
