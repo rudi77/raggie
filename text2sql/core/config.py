@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
+    type: str = Field(..., description="Database type")
     host: str = Field(..., description="Database host")
     port: int = Field(..., description="Database port")
     database: str = Field(..., description="Database name")

@@ -1,6 +1,6 @@
 """SQL agent implementation using LlamaIndex."""
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from sqlalchemy import inspect
 
 from llama_index.core import SQLDatabase
@@ -55,16 +55,37 @@ class SQLAgent:
                 print(f'__________retriever___________ : {question}\n{self.retriever._text_to_sql_prompt}')
                 response = await self.retriever.aretrieve(question)
                 print(response)
-                return {"answer": response,
-                        "sql_query": response.metadata.get("sql_query", ""),
-                        "result": response.metadata.get("result", None)
+                
+                # Handle the case where response is a list
+                if isinstance(response, list) and len(response) > 0:
+                    # Extract data from the first item in the list
+                    first_item = response[0]
+                    if hasattr(first_item, 'metadata'):
+                        return {
+                            "answer": str(first_item),
+                            "sql_query": first_item.metadata.get("sql_query", ""),
+                            "result": first_item.metadata.get("result", None)
                         }
+                    else:
+                        # If it's a list but doesn't have metadata, just return the raw response
+                        return {
+                            "answer": str(response),
+                            "sql_query": "",
+                            "result": response
+                        }
+                else:
+                    # If response is not a list or is empty, handle as before
+                    return {
+                        "answer": str(response),
+                        "sql_query": response.metadata.get("sql_query", "") if hasattr(response, 'metadata') else "",
+                        "result": response.metadata.get("result", None) if hasattr(response, 'metadata') else None
+                    }
             else:
                 response = await self.query_engine.aquery(question)
                 return {
                     "answer": str(response),
-                    "sql_query": response.metadata.get("sql_query", ""),
-                    "result": response.metadata.get("result", None)
+                    "sql_query": response.metadata.get("sql_query", "") if hasattr(response, 'metadata') else "",
+                    "result": response.metadata.get("result", None) if hasattr(response, 'metadata') else None
                 }
         except Exception as e:
             raise QueryGenerationError(f"Failed to generate or execute query: {str(e)}")

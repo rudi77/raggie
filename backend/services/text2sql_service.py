@@ -1,42 +1,51 @@
 from typing import Optional, Any
-from text2sql import (
-    query,
-    explain,
-    configure,
-    Text2SQLConfig,
-    DatabaseConfig,
-    LLMConfig,
-    QueryResult
-)
+import asyncio
+import json
+from text2sql.agent.sql_agent import SQLAgent
+from llama_index.llms.openai import OpenAI
 
 class Text2SQLService:
     def __init__(self, db_path: str, openai_api_key: str):
         """Initialize Text2SQL service with configuration."""
-        # Configure Text2SQL with your settings
-        config = Text2SQLConfig(
-            database=DatabaseConfig(
-                type="sqlite",
-                path=db_path,
-                database=db_path,
-                username="",
-                password="",
-                host="",
-                port=0,
-            ),
-            llm=LLMConfig(
-                model_name="gpt-4o-mini",
-                temperature=0.0,
-                max_tokens=1000,
-                api_key=openai_api_key,
-                timeout=30,
-            )
-        )
-        configure(config)
+        # Initialize OpenAI LLM with API key
+        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o-mini")
+        
+        # Initialize the SQL agent with our database and LLM
+        self.agent = SQLAgent(database_url=f"sqlite:///{db_path}", llm=self.llm)
 
-    async def query(self, question: str, output_format: Optional[str] = None) -> QueryResult:
+    async def query(self, question: str) -> dict:
         """Execute a natural language query."""
-        return await query(question, output_format)
+        try:
+            # Use the agent's query method which returns a dictionary with sql_query, result, and answer
+            result = await self.agent.query(question)
+            
+            print("\nQuestion:", question)
+            print("\nSQL Query:", result["sql_query"])
+            print("\nAnswer:", result["answer"])
+            print("\nRaw Result:", result["result"])
+            
+            # Format the result as JSON string
+            formatted_result = json.dumps(result["result"], default=str)
+            
+            return {
+                "sql": result["sql_query"],
+                "result": result["result"],
+                "answer": result["answer"],
+                "formatted_result": formatted_result
+            }
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL query: {str(e)}")
+            raise
 
     async def explain(self, question: str) -> str:
         """Get SQL explanation for a question without executing it."""
-        return await explain(question)
+        # For now, we'll just return the SQL query without executing it
+        try:
+            # Use the agent's query method but only return the SQL part
+            result = await self.agent.query(question)
+            return result["sql_query"]
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL explain: {str(e)}")
+            raise

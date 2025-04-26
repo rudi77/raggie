@@ -14,7 +14,6 @@ router = APIRouter(prefix="/text2sql", tags=["text2sql"])
 
 class QueryRequest(BaseModel):
     question: str
-    output_format: Optional[str] = None
 
 class QueryResponse(BaseModel):
     sql: str
@@ -28,16 +27,11 @@ async def execute_query(
 ):
     try:
         logger.info(f"Processing query request: {request}")
-        result = await text2sql_service.query(
-            request.question,
-            request.output_format
-        )
+        result = await text2sql_service.query(request.question)
         logger.info(f"Query result: {result}")
-        return {
-            "sql": result.sql,
-            "result": result.result,
-            "formatted_result": result.formatted_result
-        }
+
+        return result
+
     except Exception as e:
         logger.error(f"Error processing query: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
