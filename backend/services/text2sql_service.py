@@ -1,7 +1,7 @@
 from typing import Optional, Any
 from text2sql import (
-    query_sync,
-    explain_sync,
+    query,
+    explain,
     configure,
     Text2SQLConfig,
     DatabaseConfig,
@@ -17,6 +17,7 @@ class Text2SQLService:
             database=DatabaseConfig(
                 type="sqlite",
                 path=db_path,
+                database=db_path,
                 username="",
                 password="",
                 host="",
@@ -28,15 +29,14 @@ class Text2SQLService:
                 max_tokens=1000,
                 api_key=openai_api_key,
                 timeout=30,
-            ),
-            output_format="json"  # Default format, can be overridden per query
+            )
         )
         configure(config)
 
-    def query(self, question: str, output_format: Optional[str] = None) -> QueryResult:
+    async def query(self, question: str, output_format: Optional[str] = None) -> QueryResult:
         """Execute a natural language query."""
-        return query_sync(question, output_format)
+        return await query(question, output_format)
 
-    def explain(self, question: str) -> str:
+    async def explain(self, question: str) -> str:
         """Get SQL explanation for a question without executing it."""
-        return explain_sync(question)
+        return await explain(question)

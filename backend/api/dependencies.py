@@ -1,15 +1,9 @@
 # backend/api/dependencies.py
 
-from functools import lru_cache
 from fastapi import Depends
 from ..services.text2sql_service import Text2SQLService
-from ..core.config import Settings
+from ..core.config import get_settings, Settings
 
-@lru_cache()
-def get_settings() -> Settings:
-    return Settings()
-
-@lru_cache()
 def get_text2sql_service(settings: Settings = Depends(get_settings)) -> Text2SQLService:
     return Text2SQLService(
         db_path=settings.database_path,

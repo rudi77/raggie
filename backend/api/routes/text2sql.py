@@ -3,7 +3,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, Any
 from pydantic import BaseModel
+import logging
 from ..dependencies import get_text2sql_service
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/text2sql", tags=["text2sql"])
 
@@ -22,16 +27,19 @@ async def execute_query(
     text2sql_service = Depends(get_text2sql_service)
 ):
     try:
-        result = text2sql_service.query(
+        logger.info(f"Processing query request: {request}")
+        result = await text2sql_service.query(
             request.question,
             request.output_format
         )
+        logger.info(f"Query result: {result}")
         return {
             "sql": result.sql,
             "result": result.result,
             "formatted_result": result.formatted_result
         }
     except Exception as e:
+        logger.error(f"Error processing query: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/explain")
@@ -40,7 +48,10 @@ async def explain_query(
     text2sql_service = Depends(get_text2sql_service)
 ):
     try:
-        sql = text2sql_service.explain(request.question)
+        logger.info(f"Processing explain request: {request}")
+        sql = await text2sql_service.explain(request.question)
+        logger.info(f"Explain result: {sql}")
         return {"sql": sql}
     except Exception as e:
+        logger.error(f"Error processing explain: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
