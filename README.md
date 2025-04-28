@@ -145,3 +145,45 @@ mypy .
 ## License
 
 MIT License - see LICENSE file for details
+
+## Starting the Application
+
+### Backend Service
+
+To start the backend service, run the following command from the root directory:
+
+```bash
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+This will start the FastAPI server on http://localhost:8000.
+
+### Frontend Service
+
+To start the frontend service, navigate to the frontend directory and run:
+
+```bash
+cd frontend
+npm install  # Only needed the first time or when dependencies change
+npm run dev
+```
+
+This will start the Vite development server, typically on http://localhost:5173.
+
+## Using the Text2SQL Query Interface
+
+1. Start both the backend and frontend services as described above.
+2. Open your browser and navigate to http://localhost:5173.
+3. In the text area, enter your question in natural language (e.g., "Show me the total sales by product category").
+4. Click the "Submit Query" button.
+5. The application will display:
+   - The SQL query that was generated
+   - The results in a table format (if the results are tabular data)
+   - A formatted text representation of the results
+
+## API Endpoints
+
+The backend provides the following endpoints:
+
+- `POST /text2sql/query` - Converts a natural language question to SQL and executes it
+- `POST /text2sql/explain` - Converts a natural language question to SQL without executing it

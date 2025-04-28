@@ -1,6 +1,7 @@
 import { ThemeProvider } from './context/ThemeContext'
 import { Header } from './components/layout/Header'
 import { ChatInterface } from './components/layout/ChatInterface'
+import { Text2SqlQuery } from './components/Text2SqlQuery'
 
 export default function App() {
   return (
@@ -8,7 +9,7 @@ export default function App() {
       <div className="flex flex-col min-h-screen bg-background">
         <Header />
         <main className="flex-1 pt-header">
-          <ChatInterface />
+          <Text2SqlQuery />
         </main>
       </div>
     </ThemeProvider>
