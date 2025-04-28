@@ -5,9 +5,9 @@ from pydantic import Field
 from functools import lru_cache
 
 class Settings(BaseSettings):
-    database_path: str   = "path/to/your/database.db"
+    database_path: str   = "D:/home/Source/Repos/raggie/db/finance_test.db"
     openai_api_key: str  = Field(..., env='OPENAI_API_KEY')
-    openai_model: str    = Field('gpt-4o-mini', env='OPENAI_MODEL')
+    openai_model: str    = Field('gpt-4o', env='OPENAI_MODEL')
     openai_api_base: str = Field('https://api.openai.com/v1', env='OPENAI_API_BASE')
 
     class Config:

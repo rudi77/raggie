@@ -1,0 +1,60 @@
+@startuml CxO_Backend_Components
+' Define styles
+skinparam componentStyle rectangle
+
+package "Backend API" {
+  
+  [Main Application (FastAPI)] as MainApp <<Application>>
+
+  package "Routes" {
+    [Query Router (/query)] as QueryRouter <<Controller>>
+    [Text2SQL Router (/text2sql/*)] as Text2SQLRouter <<Controller>>
+    [SQL Router (/api/sql/*)] as SQLRouter <<Controller>>
+  }
+
+  package "Dependency Injection" {
+    [Dependency Provider] as DependencyProvider <<Component>>
+    [App Settings] as AppSettings <<Configuration>>
+  }
+
+  package "Services & Agents" {
+    [Text2SQL Service] as Text2SQLService <<Service>>
+    [Manager Agent (CodeAgent)] as ManagerAgent <<Agent>>
+    [Text2SQL Agent (ToolCallingAgent)] as Text2SQLAgent <<Agent>>
+  }
+
+  package "Tools & Libraries" {
+    [Text2SQL Tool] as Text2SQLTool <<Tool>>
+    [SQLAgent (LlamaIndex)] as SQLAgentLib <<Library>>
+  }
+
+  package "External Systems" {
+    [SQLite Database] as SQLiteDB <<Database>>
+    [OpenAI API] as OpenAIAPI <<External System>>
+  }
+
+  ' Relationships
+
+  MainApp --> QueryRouter
+  MainApp --> Text2SQLRouter
+  MainApp --> SQLRouter
+
+  QueryRouter --> ManagerAgent : Depends
+  Text2SQLRouter --> Text2SQLService : Depends
+  SQLRouter --> SQLAgentLib : (Planned Integration)
+
+  DependencyProvider --> AppSettings : Loads Settings
+  DependencyProvider --> Text2SQLService : Provides Dependencies
+  DependencyProvider --> ManagerAgent : Provides Dependencies
+
+  Text2SQLService --> SQLAgentLib : Uses LlamaIndex
+  ManagerAgent --> Text2SQLAgent : Delegates
+
+  Text2SQLAgent --> Text2SQLTool : Uses Tool
+  Text2SQLTool --> SQLAgentLib : Converts NL→SQL
+  Text2SQLTool --> OpenAIAPI : Uses LLM
+
+  SQLAgentLib --> SQLiteDB : Reads / Executes SQL
+}
+
+@enduml

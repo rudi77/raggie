@@ -1,0 +1,191 @@
+@startuml finance_schema
+
+title Finance Schema
+
+entity customers {
+  *id : INTEGER
+  --
+  name : TEXT
+  email : TEXT
+  phone : TEXT
+  country_code : TEXT
+}
+
+entity vendors {
+  *id : INTEGER
+  --
+  name : TEXT
+  email : TEXT
+  phone : TEXT
+  country_code : TEXT
+}
+
+entity invoices {
+  *id : INTEGER
+  --
+  customer_id : INTEGER
+  invoice_date : DATE
+  due_date : DATE
+  total_amount : REAL
+  currency : TEXT
+  status : TEXT
+}
+
+entity payments {
+  *id : INTEGER
+  --
+  invoice_id : INTEGER
+  payment_date : DATE
+  amount : REAL
+  payment_method_id : INTEGER
+}
+
+entity payment_methods {
+  *id : INTEGER
+  --
+  name : TEXT
+}
+
+entity dunning_levels {
+  *id : INTEGER
+  --
+  level : INTEGER
+  description : TEXT
+}
+
+entity dunning_runs {
+  *id : INTEGER
+  --
+  run_date : DATE
+}
+
+entity dunning_entries {
+  *id : INTEGER
+  --
+  invoice_id : INTEGER
+  dunning_run_id : INTEGER
+  dunning_level_id : INTEGER
+  dunning_date : DATE
+  fees : REAL
+}
+
+entity accounts {
+  *id : INTEGER
+  --
+  account_number : TEXT
+  description : TEXT
+}
+
+entity account_postings {
+  *id : INTEGER
+  --
+  account_id : INTEGER
+  posting_date : DATE
+  amount : REAL
+}
+
+entity cost_centers {
+  *id : INTEGER
+  --
+  name : TEXT
+}
+
+entity projects {
+  *id : INTEGER
+  --
+  name : TEXT
+  customer_id : INTEGER
+}
+
+entity contracts {
+  *id : INTEGER
+  --
+  customer_id : INTEGER
+  contract_date : DATE
+  total_value : REAL
+}
+
+entity payment_plans {
+  *id : INTEGER
+  --
+  contract_id : INTEGER
+  installment_number : INTEGER
+  due_date : DATE
+  amount : REAL
+}
+
+entity users {
+  *id : INTEGER
+  --
+  username : TEXT
+  role : TEXT
+}
+
+entity audit_logs {
+  *id : INTEGER
+  --
+  user_id : INTEGER
+  action : TEXT
+  timestamp : DATETIME
+}
+
+entity reminders {
+  *id : INTEGER
+  --
+  customer_id : INTEGER
+  reminder_date : DATE
+  note : TEXT
+}
+
+entity countries {
+  *code : TEXT
+  --
+  name : TEXT
+}
+
+entity currencies {
+  *code : TEXT
+  --
+  name : TEXT
+}
+
+entity address_book {
+  *id : INTEGER
+  --
+  entity_type : TEXT
+  entity_id : INTEGER
+  street : TEXT
+  city : TEXT
+  postal_code : TEXT
+  country_code : TEXT
+}
+
+' Relationships
+customers ||--o{ invoices : has
+customers ||--o{ projects : has
+customers ||--o{ contracts : has
+customers ||--o{ reminders : has
+
+vendors ||--o{ address_book : has
+
+invoices ||--o{ payments : paid_by
+invoices ||--o{ dunning_entries : dunned_by
+
+payment_methods ||--o{ payments : method
+
+dunning_runs ||--o{ dunning_entries : runs
+dunning_levels ||--o{ dunning_entries : levels
+
+accounts ||--o{ account_postings : booked_on
+
+contracts ||--o{ payment_plans : scheduled_by
+
+users ||--o{ audit_logs : created
+
+countries ||--o{ customers : from
+countries ||--o{ vendors : from
+countries ||--o{ address_book : from
+
+currencies ||--o{ invoices : invoiced_in
+
+@enduml
