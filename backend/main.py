@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-from .api.routes import text2sql
+from .api.routes import text2sql, query
 
 app = FastAPI(
     title="cxo API",
@@ -22,6 +22,7 @@ app.add_middleware(
 
 # Include Text2SQL routes
 app.include_router(text2sql.router)
+app.include_router(query.router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

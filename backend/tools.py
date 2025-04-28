@@ -6,6 +6,19 @@ from text2sql.agent.sql_agent import SQLAgent
 from llama_index.llms.openai import OpenAI
 
 class Text2SQLTool(Tool):
+    description = """
+    A tool that converts natural language questions into SQL queries, executes them on a database and returns the result as a JSON string.
+    Just provide the question, the tool will return the result as a JSON string.
+    """
+    name = "Text2SQLTool"
+    inputs = {
+        "question" : {
+            "type" : "string",
+            "description" : "The question to convert to a SQL query"
+        }
+    }
+    output_type = "string"
+
     def __init__(self, db_path: str, openai_api_key: str):
         """Initialize Text2SQL service with configuration."""
         # Initialize OpenAI LLM with API key
@@ -14,7 +27,9 @@ class Text2SQLTool(Tool):
         # Initialize the SQL agent with our database and LLM
         self.agent = SQLAgent(database_url=f"sqlite:///{db_path}", llm=self.llm)
 
-    async def query(self, question: str) -> dict:
+        self.is_initialized = True
+
+    async def forward(self, question: str) -> str:
         """Execute a natural language query."""
         try:
             # Use the agent's query method which returns a dictionary with sql_query, result, and answer
@@ -28,12 +43,14 @@ class Text2SQLTool(Tool):
             # Format the result as JSON string
             formatted_result = json.dumps(result["result"], default=str)
             
-            return {
+            response = {
                 "sql": result["sql_query"],
                 "result": result["result"],
                 "answer": result["answer"],
                 "formatted_result": formatted_result
             }
+            
+            return json.dumps(response)
         except Exception as e:
             # Log the error and re-raise
             print(f"Error in Text2SQL query: {str(e)}")

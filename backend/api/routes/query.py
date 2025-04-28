@@ -3,10 +3,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, Any
 from pydantic import BaseModel
+from smolagents import CodeAgent
+from ..dependencies import get_manager_agent
 
-from ...agents import create_manager_agent
-
-router = APIRouter(prefix="/query", tags=["query"])
+router = APIRouter(tags=["query"])
 
 class QueryRequest(BaseModel):
     question: str
@@ -18,10 +18,10 @@ class QueryResponse(BaseModel):
 @router.post('/query', response_model=QueryResponse)
 async def execute_query(
     request: QueryRequest,
-    manager_agent = Depends(create_manager_agent)
+    manager_agent: CodeAgent = Depends(get_manager_agent)
 ):
     try:
-        result = await manager_agent.execute(request.question)
+        result = await manager_agent.run(request.question)
         return QueryResponse(sql=result["sql"], result=result["result"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
