@@ -4,9 +4,9 @@ Taskliste (mit Aufteilung Frontend/Backend)
  [x] Neue SQLite DB mit sql_templates Tabelle erstellt
  [x] SQLAlchemy Model mit Feldern: id, query, source_question, widget_type, refresh_rate, created_at
  [x] Pydantic Schemas für API-Validierung
- [ ] POST /api/templates – Template speichern
- [ ] GET /api/templates – Templates auflisten
- [ ] DELETE /api/templates/{id} – Template löschen
+ [x] POST /api/templates – Template speichern
+ [x] GET /api/templates – Templates auflisten
+ [x] DELETE /api/templates/{id} – Template löschen
 
 🔁 Scheduler
  [ ] Starte beim App-Start einen BackgroundTask mit periodischem Scheduler (z. B. mit asyncio.create_task)
