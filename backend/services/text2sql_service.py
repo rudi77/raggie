@@ -8,7 +8,7 @@ class Text2SQLService:
     def __init__(self, db_path: str, openai_api_key: str):
         """Initialize Text2SQL service with configuration."""
         # Initialize OpenAI LLM with API key
-        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o")
+        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o-mini")
         
         # Initialize the SQL agent with our database and LLM
         self.agent = SQLAgent(database_url=f"sqlite:///{db_path}", llm=self.llm)

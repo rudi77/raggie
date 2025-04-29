@@ -32,9 +32,9 @@ export function Header() {
               <Moon className="w-4 h-4 text-gray-400" />
             )}
           </button>
-          <button className="px-3 py-1 bg-[#4285f4]/20 text-[#4285f4] text-sm rounded-md">
+          {/* <button className="px-3 py-1 bg-[#4285f4]/20 text-[#4285f4] text-sm rounded-md">
             22M2fu
-          </button>
+          </button> */}
         </div>
       </div>
     </header>

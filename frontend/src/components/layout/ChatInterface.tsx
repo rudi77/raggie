@@ -166,21 +166,26 @@ export function ChatInterface() {
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-gray-300">Results:</h4>
           {Array.isArray(response.result) && response.result.length > 0 && typeof response.result[0] === 'object' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+            <div className="overflow-x-auto rounded-lg border border-gray-700">
+              <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="text-gray-400 text-sm">
+                  <tr className="border-b border-gray-700 bg-gray-800">
                     {Object.keys(response.result[0]).map(header => (
-                      <th key={header} className="py-2 pr-4">{header}</th>
+                      <th key={header} className="px-4 py-3 text-sm font-medium text-gray-300 uppercase tracking-wider">
+                        {header}
+                      </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="text-gray-200">
+                <tbody className="divide-y divide-gray-700">
                   {response.result.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
+                    <tr 
+                      key={rowIndex}
+                      className="bg-[#1e2538] hover:bg-gray-800 transition-colors duration-150 ease-in-out"
+                    >
                       {Object.values(row).map((value, valueIndex) => (
-                        <td key={valueIndex} className="py-2 pr-4">
-                          {value !== null && value !== undefined ? String(value) : ''}
+                        <td key={valueIndex} className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
+                          {value !== null && value !== undefined ? String(value) : '-'}
                         </td>
                       ))}
                     </tr>
