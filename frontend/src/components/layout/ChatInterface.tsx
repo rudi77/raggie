@@ -1,6 +1,6 @@
 'use client'
 
-import { Paperclip, Mic, Send } from 'lucide-react'
+import { Paperclip, Mic, Send, ArrowLeft, ArrowRight } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
@@ -21,6 +21,7 @@ export function ChatInterface() {
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const { theme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -206,15 +207,16 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-light-background dark:bg-dark-background pt-16">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="w-full min-h-full py-6">
+    <div className={`fixed left-0 top-16 bottom-0 flex transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12' : 'w-[600px]'}`}>
+      {/* Main Chat Container */}
+      <div className={`flex flex-col flex-1 bg-light-background dark:bg-dark-background ${isCollapsed ? 'hidden' : ''}`}>
+        <div className="flex-1 overflow-y-auto">
+          <div className="w-full min-h-full py-6 px-4">
             {messages.map(message => (
               <div key={message.id} className="mb-4">
                 {message.isUser ? (
                   <div className="flex justify-end">
-                    <div className="max-w-[600px]">
+                    <div className="max-w-[400px]">
                       <div className="bg-light-primary dark:bg-dark-primary text-white px-4 py-2 rounded-xl">
                         {message.text}
                       </div>
@@ -290,10 +292,8 @@ export function ChatInterface() {
             ))}
           </div>
         </div>
-      </div>
 
-      <div className="border-t border-light-border dark:border-dark-border bg-light-background dark:bg-dark-background py-6">
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="border-t border-light-border dark:border-dark-border bg-light-background dark:bg-dark-background py-4 px-4">
           <form onSubmit={handleSubmit} className="relative">
             <input
               type="text"
@@ -326,6 +326,18 @@ export function ChatInterface() {
           </div>
         </div>
       </div>
+
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="w-12 flex items-center justify-center bg-light-background-light dark:bg-dark-background-light border-l border-light-border dark:border-dark-border hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
+      >
+        {isCollapsed ? (
+          <ArrowRight className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />
+        ) : (
+          <ArrowLeft className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />
+        )}
+      </button>
     </div>
   )
 } 
