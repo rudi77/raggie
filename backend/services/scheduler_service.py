@@ -4,12 +4,14 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 from ..core.database import SessionLocal
 from ..core.models import SQLTemplate
+from .text2sql_service import Text2SQLService
 
 class SchedulerService:
-    def __init__(self):
+    def __init__(self, text2sql_service: Text2SQLService):
         self.results: Dict[int, Any] = {}  # template_id -> latest result
         self.running = False
         self._task = None
+        self.text2sql = text2sql_service
 
     async def start(self):
         """Start the scheduler service"""
@@ -29,6 +31,24 @@ class SchedulerService:
         """Get the latest result for a template"""
         return self.results.get(template_id)
 
+    async def execute_template(self, template: SQLTemplate) -> dict:
+        """Execute a single template and return the result"""
+        try:
+            # Execute the stored SQL query directly
+            result = await self.text2sql.execute_sql(template.query)
+            
+            return {
+                'data': result,
+                'timestamp': datetime.now(),
+                'error': None
+            }
+        except Exception as e:
+            return {
+                'data': None,
+                'timestamp': datetime.now(),
+                'error': str(e)
+            }
+
     async def _run_scheduler(self):
         """Main scheduler loop"""
         while self.running:
@@ -46,12 +66,8 @@ class SchedulerService:
                         if (template.last_execution is None or 
                             (now - template.last_execution).total_seconds() >= template.refresh_rate):
                             
-                            # Execute the query and store result
-                            # TODO: Implement actual query execution
-                            result = {
-                                'data': f"Mock result for template {template.id}",
-                                'timestamp': now
-                            }
+                            # Execute the query
+                            result = await self.execute_template(template)
                             self.results[template.id] = result
                             
                             # Update last_execution in database
@@ -72,5 +88,4 @@ class SchedulerService:
             # Sleep for a short interval before next check
             await asyncio.sleep(1)
 
-# Global instance
-scheduler = SchedulerService() 
+# Note: Don't create the global instance here anymore since we need the text2sql service 

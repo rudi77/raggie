@@ -38,6 +38,28 @@ class Text2SQLService:
             print(f"Error in Text2SQL query: {str(e)}")
             raise
 
+    async def execute_sql(self, sql_query: str) -> dict:
+        """Execute a raw SQL query directly."""
+        try:
+            # Use the agent's execute_sql method to run the query
+            result = await self.agent.execute_sql(sql_query)
+            
+            print("\nExecuting SQL:", sql_query)
+            print("\nRaw Result:", result)
+            
+            # Format the result as JSON string
+            formatted_result = json.dumps(result, default=str)
+            
+            return {
+                "sql": sql_query,
+                "result": result,
+                "formatted_result": formatted_result
+            }
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error executing SQL: {str(e)}")
+            raise
+
     async def explain(self, question: str) -> str:
         """Get SQL explanation for a question without executing it."""
         # For now, we'll just return the SQL query without executing it

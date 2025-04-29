@@ -5,7 +5,9 @@ from typing import List, Optional
 import uvicorn
 from .api.routes import text2sql, query, templates
 from .core.database import create_tables
-from .services.scheduler_service import scheduler
+from .services.scheduler_service import SchedulerService
+from .services.text2sql_service import Text2SQLService
+from .core.config import settings
 
 app = FastAPI(
     title="cxo API",
@@ -15,6 +17,13 @@ app = FastAPI(
 
 # Create database tables on startup
 create_tables()
+
+# Initialize services
+text2sql_service = Text2SQLService(
+    db_path=settings.DATABASE_URL.replace("sqlite:///", ""),
+    openai_api_key=settings.OPENAI_API_KEY
+)
+scheduler = SchedulerService(text2sql_service)
 
 @app.on_event("startup")
 async def startup_event():

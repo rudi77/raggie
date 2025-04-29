@@ -1,7 +1,7 @@
 """SQL agent implementation using LlamaIndex."""
 from pathlib import Path
 from typing import Dict, Optional, Any, List
-from sqlalchemy import inspect
+from sqlalchemy import inspect, create_engine, text
 
 from llama_index.core import SQLDatabase
 from llama_index.core.query_engine import NLSQLTableQueryEngine
@@ -36,6 +36,8 @@ class SQLAgent:
             llm=self.llm,
             tables=self.sql_database.get_usable_table_names()
         )
+        
+        self.engine = create_engine(self.database_url, future=True)
 
 
     async def query(self, question: str, retriever: bool = True) -> Dict[str, Any]:
@@ -89,6 +91,28 @@ class SQLAgent:
                 }
         except Exception as e:
             raise QueryGenerationError(f"Failed to generate or execute query: {str(e)}")
+
+    async def execute_raw_sql(self, sql_query: str) -> Dict[str, Any]:
+        """
+        Execute a raw SQL query using SQLAlchemy, bypassing LlamaIndex entirely.
+        Returns a dict with the rows.
+        """
+        try:
+
+            # Run in thread‐pool so you don’t block the event loop
+            from starlette.concurrency import run_in_threadpool
+
+            def _run():
+                with self.engine.connect() as conn:
+                    result = conn.execute(text(sql_query))
+                    # turn each Row into a dict
+                    return [dict(row) for row in result]
+
+            rows = await run_in_threadpool(_run)
+            return {"result": rows}
+
+        except Exception as e:
+            raise QueryGenerationError(f"Failed to execute SQL query: {e}")
 
     def get_table_info(self) -> str:
         """Get information about available tables in the database.

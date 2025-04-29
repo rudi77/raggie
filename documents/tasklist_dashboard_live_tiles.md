@@ -2,7 +2,7 @@ Taskliste (mit Aufteilung Frontend/Backend)
 🧩 Backend
 🗂️ Template-Modell + Endpunkte
  [x] Neue SQLite DB mit sql_templates Tabelle erstellt
- [x] SQLAlchemy Model mit Feldern: id, query, source_question, widget_type, refresh_rate, created_at
+ [x] SQLAlchemy Model mit Feldern: id, query, source_question, widget_type, refresh_rate, created_at, last_execution
  [x] Pydantic Schemas für API-Validierung
  [x] POST /api/templates – Template speichern
  [x] GET /api/templates – Templates auflisten
@@ -12,7 +12,7 @@ Taskliste (mit Aufteilung Frontend/Backend)
  [x] Starte beim App-Start einen BackgroundTask mit periodischem Scheduler (asyncio.create_task)
  [x] Führe für jedes Template regelmäßig das SQL-Statement aus (Basis-Implementierung)
  [x] Speichere das Ergebnis in Memory
- [ ] Implementiere tatsächliche Query-Ausführung mit Text2SQLService
+ [x] Implementiere tatsächliche Query-Ausführung mit Text2SQLService
  [ ] Implementiere Broadcast an WebSocket-Clients
 
 📡 WebSocket/SSE
