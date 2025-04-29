@@ -40,19 +40,24 @@ class SchedulerService:
                 # Execute each template
                 for template in templates:
                     try:
-                        # Check if it's time to execute this template
-                        last_result = self.results.get(template.id, {})
-                        last_execution = last_result.get('last_execution', datetime.min)
                         now = datetime.now()
                         
-                        if (now - last_execution).total_seconds() >= template.refresh_rate:
+                        # Check if it's time to execute this template
+                        if (template.last_execution is None or 
+                            (now - template.last_execution).total_seconds() >= template.refresh_rate):
+                            
                             # Execute the query and store result
                             # TODO: Implement actual query execution
                             result = {
                                 'data': f"Mock result for template {template.id}",
-                                'last_execution': now
+                                'timestamp': now
                             }
                             self.results[template.id] = result
+                            
+                            # Update last_execution in database
+                            template.last_execution = now
+                            db.add(template)
+                            db.commit()
                             
                             # TODO: Broadcast result to WebSocket clients
                             

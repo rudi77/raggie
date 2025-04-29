@@ -18,6 +18,7 @@ class SQLTemplate(Base):
     widget_type = Column(Enum(WidgetType), nullable=False)
     refresh_rate = Column(Integer, nullable=False)  # in seconds
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_execution = Column(DateTime(timezone=True), nullable=True)
     
     class Config:
         orm_mode = True 
