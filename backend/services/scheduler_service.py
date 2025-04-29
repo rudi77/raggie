@@ -1,15 +1,31 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from ..core.database import SessionLocal
 from ..core.models import SQLTemplate
 from .text2sql_service import Text2SQLService
 from .websocket_manager import websocket_manager
 
+class ExecutionResult:
+    def __init__(self, data: Optional[dict] = None, error: Optional[str] = None):
+        self.timestamp = datetime.now()
+        self.data = data
+        self.error = error
+        self.template_id: Optional[int] = None
+        self.template_info: Optional[dict] = None
+
+    def to_dict(self) -> dict:
+        return {
+            'timestamp': self.timestamp.isoformat(),
+            'data': self.data,
+            'error': self.error,
+            'template_info': self.template_info
+        }
+
 class SchedulerService:
     def __init__(self, text2sql_service: Text2SQLService, check_interval: int = 1):
-        self.results: Dict[int, Any] = {}  # template_id -> latest result
+        self.results: Dict[int, ExecutionResult] = {}
         self.running = False
         self._task = None
         self.text2sql = text2sql_service
@@ -30,40 +46,41 @@ class SchedulerService:
         if self._task:
             await self._task
 
-    def get_result(self, template_id: int) -> Any:
+    def get_result(self, template_id: int) -> Optional[dict]:
         """Get the latest result for a template"""
-        return self.results.get(template_id)
+        result = self.results.get(template_id)
+        return result.to_dict() if result else None
 
     def _cleanup_old_results(self):
         """Remove results older than cleanup threshold"""
         now = datetime.now()
         to_remove = []
         for template_id, result in self.results.items():
-            if result.get('timestamp'):
-                age = now - result['timestamp']
-                if age > self._cleanup_threshold:
-                    to_remove.append(template_id)
+            age = now - result.timestamp
+            if age > self._cleanup_threshold:
+                to_remove.append(template_id)
         
         for template_id in to_remove:
             del self.results[template_id]
 
-    async def execute_template(self, template: SQLTemplate) -> dict:
+    async def execute_template(self, template: SQLTemplate) -> ExecutionResult:
         """Execute a single template and return the result"""
+        result = ExecutionResult()
+        result.template_id = template.id
+        result.template_info = {
+            'source_question': template.source_question,
+            'widget_type': template.widget_type.value,
+            'refresh_rate': template.refresh_rate
+        }
+        
         try:
             # Execute the stored SQL query directly
-            result = await self.text2sql.execute_sql(template.query)
-            
-            return {
-                'data': result,
-                'timestamp': datetime.now(),
-                'error': None
-            }
+            sql_result = await self.text2sql.execute_sql(template.query)
+            result.data = sql_result
         except Exception as e:
-            return {
-                'data': None,
-                'timestamp': datetime.now(),
-                'error': str(e)
-            }
+            result.error = str(e)
+        
+        return result
 
     async def _run_scheduler(self):
         """Main scheduler loop"""
@@ -96,7 +113,7 @@ class SchedulerService:
                                 db.commit()
                                 
                                 # Broadcast result to WebSocket clients
-                                await websocket_manager.broadcast(template.id, result)
+                                await websocket_manager.broadcast(template.id, result.to_dict())
                                 
                         except Exception as e:
                             print(f"Error executing template {template.id}: {str(e)}")

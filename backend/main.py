@@ -7,6 +7,7 @@ from .api.routes import text2sql, query, templates, websocket
 from .core.database import create_tables
 from .services.scheduler_service import SchedulerService
 from .services.text2sql_service import Text2SQLService
+from .services.websocket_manager import websocket_manager
 from .core.config import settings
 
 app = FastAPI(
@@ -27,13 +28,22 @@ scheduler = SchedulerService(text2sql_service)
 
 @app.on_event("startup")
 async def startup_event():
-    """Start the scheduler on app startup"""
+    """Start services on app startup"""
+    # Start the scheduler
     await scheduler.start()
+    # Start WebSocket health checks
+    await websocket_manager.start_health_check()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Stop the scheduler on app shutdown"""
+    """Stop services on app shutdown"""
+    # Stop the scheduler
     await scheduler.stop()
+    # Stop WebSocket health checks
+    await websocket_manager.stop_health_check()
+    # Close all WebSocket connections
+    for connection in websocket_manager.active_connections.copy():
+        await connection.close()
 
 # CORS middleware configuration
 app.add_middleware(
