@@ -1,6 +1,6 @@
 'use client'
 
-import { Paperclip, Mic, Send, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Paperclip, Mic, Send } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
@@ -332,11 +332,9 @@ export function ChatInterface() {
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="w-12 flex items-center justify-center bg-light-background-light dark:bg-dark-background-light border-l border-light-border dark:border-dark-border hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
       >
-        {isCollapsed ? (
-          <ArrowRight className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />
-        ) : (
-          <ArrowLeft className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />
-        )}
+        <span className="text-light-text-secondary dark:text-dark-text-secondary text-lg font-medium">
+          {isCollapsed ? '→' : '←'}
+        </span>
       </button>
     </div>
   )
