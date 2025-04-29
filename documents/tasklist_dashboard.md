@@ -25,8 +25,10 @@ Hier findest du eine klare, schrittweise abarbeitbare **Taskliste** zur Integrat
 
 - [x] **Layout & Design**
   - [x] Header mit Logo, Titel und Theme-Toggle
-  - [x] Dunkles Farbschema implementieren
+  - [x] Dunkles und helles Farbschema implementieren
   - [x] Responsive Layout erstellen
+  - [x] Kollabierbare Seitenleiste für Chat
+  - [x] Korrekte Hintergrundfarben für beide Themes
 
 - [x] **ChatInterface-Komponente**
   - [x] Chat-UI mit Nachrichten-Bubbles
@@ -35,6 +37,8 @@ Hier findest du eine klare, schrittweise abarbeitbare **Taskliste** zur Integrat
   - [x] Zeitstempel-Formatierung
   - [x] SQL-Ergebnisse im Chat-Format
   - [x] Tabellarische Darstellung mit Styling
+  - [x] Toggle-Funktion für Chat-Bereich
+  - [x] Animierte Übergänge
 
 - [x] **DynamicRenderer-Komponente**
   - [x] Basis-Implementierung
@@ -129,5 +133,7 @@ Hier findest du eine klare, schrittweise abarbeitbare **Taskliste** zur Integrat
   - [x] Formatierte Ausgabe
   - [x] Responsive Design
   - [x] Dynamische Komponenten
+  - [x] Kollabierbare Seitenleiste
+  - [x] Theme-Support (Hell/Dunkel)
 
 Mit dieser Taskliste hast du eine klare und logische Roadmap, um die **Text2SQL-Funktionalität** effektiv ins CxO Dashboard zu integrieren und schnell erste, nutzbare Ergebnisse zu erhalten!
