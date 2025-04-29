@@ -1,20 +1,24 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
+from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 from .models import WidgetType
 
 class SQLTemplateBase(BaseModel):
+    name: str
+    description: Optional[str] = None
     query: str
-    source_question: str
-    widget_type: WidgetType
-    refresh_rate: int = Field(gt=0)  # must be positive
+    source_question: Optional[str] = None
+    widget_type: WidgetType = WidgetType.TABLE
+    refresh_rate: int = 0
 
 class SQLTemplateCreate(SQLTemplateBase):
     pass
 
-class SQLTemplate(SQLTemplateBase):
+class SQLTemplateResponse(SQLTemplateBase):
     id: int
     created_at: datetime
+    updated_at: Optional[datetime] = None
+    last_execution: Optional[datetime] = None
 
     class Config:
-        orm_mode = True 
+        from_attributes = True 

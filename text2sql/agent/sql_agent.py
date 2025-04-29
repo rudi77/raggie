@@ -24,8 +24,10 @@ class SQLAgent:
             database_url: URL to the database (e.g. sqlite:///path/to/db.sqlite)
             llm: Optional language model to use. If not provided, uses OpenAI.
         """
+        self.database_url = database_url
         self.llm = llm or OpenAI()
-        self.sql_database = SQLDatabase.from_uri(database_url)
+        self.engine = create_engine(self.database_url, future=True)
+        self.sql_database = SQLDatabase.from_uri(self.database_url)
         self.query_engine = NLSQLTableQueryEngine(
             sql_database=self.sql_database,
             llm=self.llm,
@@ -37,8 +39,6 @@ class SQLAgent:
             tables=self.sql_database.get_usable_table_names()
         )
         
-        self.engine = create_engine(self.database_url, future=True)
-
 
     async def query(self, question: str, retriever: bool = True) -> Dict[str, Any]:
         """Execute a natural language query against the database.
@@ -99,7 +99,7 @@ class SQLAgent:
         """
         try:
 
-            # Run in thread‐pool so you don’t block the event loop
+            # Run in thread‐pool so you don't block the event loop
             from starlette.concurrency import run_in_threadpool
 
             def _run():

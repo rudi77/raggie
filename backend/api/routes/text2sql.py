@@ -1,51 +1,55 @@
 # backend/api/routes/text2sql.py
 
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional, Any
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import Dict, Any
 from pydantic import BaseModel
-import logging
-from ..dependencies import get_text2sql_service
+from ...core.database import get_finance_db
+from ...services.text2sql_service import Text2SQLService
+from ...core.config import settings
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+router = APIRouter(
+    prefix="/text2sql",
+    tags=["text2sql"]
+)
 
-router = APIRouter(prefix="/text2sql", tags=["text2sql"])
+# Initialize Text2SQL service
+text2sql_service = Text2SQLService(db_path=settings.FINANCE_DB_PATH)
+
+# Initialize the service
+@router.on_event("startup")
+async def startup_event():
+    await text2sql_service.initialize()
 
 class QueryRequest(BaseModel):
     question: str
 
-class QueryResponse(BaseModel):
+class SQLRequest(BaseModel):
     sql: str
-    result: Any
-    formatted_result: str
 
-@router.post("/query", response_model=QueryResponse)
-async def execute_query(
-    request: QueryRequest,
-    text2sql_service = Depends(get_text2sql_service)
-):
+@router.post("/query")
+async def query(request: QueryRequest) -> Dict[str, Any]:
+    """Convert natural language question to SQL and execute it."""
     try:
-        logger.info(f"Processing query request: {request}")
         result = await text2sql_service.query(request.question)
-        logger.info(f"Query result: {result}")
-
         return result
-
     except Exception as e:
-        logger.error(f"Error processing query: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/execute")
+async def execute_sql(request: SQLRequest) -> Dict[str, Any]:
+    """Execute a raw SQL query."""
+    try:
+        result = await text2sql_service.execute_sql(request.sql)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/explain")
-async def explain_query(
-    request: QueryRequest,
-    text2sql_service = Depends(get_text2sql_service)
-):
+async def explain(request: QueryRequest) -> str:
+    """Get SQL explanation for a question without executing it."""
     try:
-        logger.info(f"Processing explain request: {request}")
         sql = await text2sql_service.explain(request.question)
-        logger.info(f"Explain result: {sql}")
-        return {"sql": sql}
+        return sql
     except Exception as e:
-        logger.error(f"Error processing explain: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,64 +1,75 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional
-import uvicorn
-from .api.routes import text2sql, query, templates, websocket
-from .core.database import create_tables
-from .services.scheduler_service import SchedulerService
-from .services.text2sql_service import Text2SQLService
-from .services.websocket_manager import websocket_manager
-from .core.config import settings
+import logging
+from pathlib import Path
 
-app = FastAPI(
-    title="cxo API",
-    description="Backend API for cxo",
-    version="0.1.0"
+from backend.core.config import settings
+from backend.core.database import templates_engine, Base
+from backend.services.text2sql_service import Text2SQLService
+from backend.services.scheduler_service import SchedulerService
+from backend.services.websocket_manager import websocket_manager
+from backend.api.routes import templates, websocket, text2sql
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
 
-# Create database tables on startup
-create_tables()
+app = FastAPI()
 
-# Initialize services
-text2sql_service = Text2SQLService(
-    db_path=settings.DATABASE_URL.replace("sqlite:///", ""),
-    openai_api_key=settings.OPENAI_API_KEY
-)
-scheduler = SchedulerService(text2sql_service)
-
-@app.on_event("startup")
-async def startup_event():
-    """Start services on app startup"""
-    # Start the scheduler
-    await scheduler.start()
-    # Start WebSocket health checks
-    await websocket_manager.start_health_check()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop services on app shutdown"""
-    # Stop the scheduler
-    await scheduler.stop()
-    # Stop WebSocket health checks
-    await websocket_manager.stop_health_check()
-    # Close all WebSocket connections
-    for connection in websocket_manager.active_connections.copy():
-        await connection.close()
-
-# CORS middleware configuration
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routes
-app.include_router(text2sql.router)
-app.include_router(query.router)
-app.include_router(templates.router)
-app.include_router(websocket.router)
+# Include routers
+app.include_router(templates.router)  # Already has prefix in router definition
+app.include_router(websocket.router)  # Already has prefix in router definition
+app.include_router(text2sql.router)  # Already has prefix in router definition
 
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+# Initialize services
+text2sql_service = Text2SQLService(db_path=settings.FINANCE_DB_PATH)
+scheduler_service = SchedulerService(text2sql_service)
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Creating database tables...")
+    Base.metadata.create_all(bind=templates_engine)
+    logger.info("Database tables created successfully")
+    
+    logger.info(f"Initializing Text2SQLService with finance database: {settings.FINANCE_DB_PATH}")
+    await text2sql_service.initialize()
+    
+    logger.info("Initializing SchedulerService...")
+    await scheduler_service.initialize()
+    
+    logger.info("Starting scheduler...")
+    await scheduler_service.start()
+    
+    logger.info("Starting WebSocket health checks...")
+    await websocket_manager.start_health_check()
+    
+    logger.info("Application startup complete")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Stopping scheduler...")
+    await scheduler_service.stop()
+    
+    logger.info("Stopping WebSocket health checks...")
+    await websocket_manager.stop_health_check()
+    
+    logger.info("Closing WebSocket connections...")
+    await websocket_manager.close_all()
+    
+    logger.info("Application shutdown complete")
+
+@app.get("/")
+async def root():
+    return {"message": "Raggie API is running"} 

@@ -1,21 +1,37 @@
 # backend/core/config.py
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
-from functools import lru_cache
+from pathlib import Path
+import os
 
 class Settings(BaseSettings):
-    database_path: str   = "D:/home/Source/Repos/raggie/db/finance_test.db"
-    openai_api_key: str  = Field(..., env='OPENAI_API_KEY')
-    openai_model: str    = Field('gpt-4o', env='OPENAI_MODEL')
-    openai_api_base: str = Field('https://api.openai.com/v1', env='OPENAI_API_BASE')
-
+    # Base paths
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
+    DATA_DIR: Path = BASE_DIR / "data"
+    
+    # Database paths
+    FINANCE_DB_PATH: Path = DATA_DIR / "finance.db"
+    TEMPLATES_DB_PATH: Path = DATA_DIR / "templates.db"
+    
+    # API settings
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    
+    # WebSocket settings
+    WS_HEALTH_CHECK_INTERVAL: int = 30  # seconds
+    WS_PING_TIMEOUT: int = 10  # seconds
+    
+    # Scheduler settings
+    SCHEDULER_INTERVAL: int = 60  # seconds
+    MAX_RESULTS_AGE: int = 3600  # 1 hour in seconds
+    
     class Config:
         env_file = ".env"
 
-    def __hash__(self):
-        return hash((self.database_path, self.openai_api_key))
+settings = Settings()
 
-@lru_cache()
+# Ensure data directory exists
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 def get_settings() -> Settings:
-    return Settings()
+    """Get the global settings instance."""
+    return settings
