@@ -102,7 +102,7 @@ class Text2SQLService:
             # Execute the query using the correct method name
             result = await self.agent.execute_raw_sql(sql_query)
             
-            logger.info(f"Query execution result: {result}")
+            logger.debug(f"Query execution result: {result}")
             return result
         except SQLAlchemyError as e:
             logger.error(f"SQLAlchemy error executing query: {str(e)}")

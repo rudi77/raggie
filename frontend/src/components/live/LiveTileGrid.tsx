@@ -60,7 +60,7 @@ export const LiveTileGrid: React.FC = () => {
         if (tile) {
           newTiles.set(update.template_id, {
             ...tile,
-            data: update.result.data,
+            data: update.result.data.result,
             error: update.result.error,
             lastUpdate: update.result.timestamp
           });
