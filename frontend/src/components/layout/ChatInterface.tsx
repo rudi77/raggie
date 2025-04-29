@@ -4,6 +4,7 @@ import { Paperclip, Mic, Send } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
+import { queryText2Sql, QueryResponse } from '../../services/api'
 
 interface Message {
   id: string
@@ -11,14 +12,16 @@ interface Message {
   timestamp: string
   isUser: boolean
   showDynamicComponent?: boolean
+  sqlResponse?: QueryResponse
 }
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
+  const [loading, setLoading] = useState(false)
   const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputValue.trim()) return
 
@@ -34,66 +37,166 @@ export function ChatInterface() {
     }
 
     setMessages(prev => [...prev, userMessage])
+    setLoading(true)
 
-    const isRevenueQuery =
-      inputValue.toLowerCase().includes('umsatz') ||
-      inputValue.toLowerCase().includes('revenue') ||
-      inputValue.toLowerCase().includes('entwicklung')
+    try {
+      // Try to process as SQL query first
+      const sqlResponse = await queryText2Sql({ question: inputValue })
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Hier ist das Ergebnis deiner Anfrage:',
+        timestamp: new Date().toLocaleTimeString('de-DE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        isUser: false,
+        sqlResponse
+      }
+      setMessages(prev => [...prev, botResponse])
+    } catch (err) {
+      // If SQL query fails, try revenue visualization
+      const isRevenueQuery =
+        inputValue.toLowerCase().includes('umsatz') ||
+        inputValue.toLowerCase().includes('revenue') ||
+        inputValue.toLowerCase().includes('entwicklung')
 
-    if (isRevenueQuery) {
-      fetch(`http://localhost:8000/api/generated-code?query=${encodeURIComponent(inputValue)}`)
-        .then(res => res.json())
-        .then(({ code }) => {
-          console.log('Fetched code:', code);
-          const transpiled = Babel.transform(code, {
-            presets: [Babel.availablePresets['react']],
-            filename: 'dynamic.js',
-            configFile: false,
-            babelrc: false
-          }).code
-          console.log('Transpiled code:', transpiled);
+      if (isRevenueQuery) {
+        fetch(`http://localhost:8000/api/generated-code?query=${encodeURIComponent(inputValue)}`)
+          .then(res => res.json())
+          .then(({ code }) => {
+            console.log('Fetched code:', code);
+            const transpiled = Babel.transform(code, {
+              presets: [Babel.availablePresets['react']],
+              filename: 'dynamic.js',
+              configFile: false,
+              babelrc: false
+            }).code
+            console.log('Transpiled code:', transpiled);
 
-          // Create a new function to evaluate the code in the proper context
-          const moduleCode = `
-            const React = arguments[0];
-            const exports = {};
-            ${transpiled}
-            return exports.default;
-          `
-          try {
-            const executeCode = new Function(moduleCode)
-            const Component = executeCode(React)
+            const moduleCode = `
+              const React = arguments[0];
+              const exports = {};
+              ${transpiled}
+              return exports.default;
+            `
+            try {
+              const executeCode = new Function(moduleCode)
+              const Component = executeCode(React)
 
-            if (typeof Component !== 'function') {
-              throw new Error('Generated code did not return a valid React component')
+              if (typeof Component !== 'function') {
+                throw new Error('Generated code did not return a valid React component')
+              }
+
+              setDynamicComponent(() => Component)
+
+              const botResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                text: 'Hier ist die angeforderte Umsatzentwicklung:',
+                timestamp: new Date().toLocaleTimeString('de-DE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+                isUser: false,
+                showDynamicComponent: true,
+              }
+
+              setMessages(prev => [...prev, botResponse])
+            } catch (error) {
+              console.error('Error executing code:', error);
+              const errorResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                text: 'Entschuldigung, ich konnte deine Anfrage nicht verarbeiten.',
+                timestamp: new Date().toLocaleTimeString('de-DE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+                isUser: false,
+              }
+              setMessages(prev => [...prev, errorResponse])
             }
-
-            setDynamicComponent(() => Component)
-
-            const botResponse: Message = {
+          })
+          .catch(err => {
+            console.error('Error fetching or transpiling code:', err)
+            const errorResponse: Message = {
               id: (Date.now() + 1).toString(),
-              text: 'Hier ist die angeforderte Umsatzentwicklung:',
+              text: 'Entschuldigung, es gab einen Fehler bei der Verarbeitung deiner Anfrage.',
               timestamp: new Date().toLocaleTimeString('de-DE', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
               }),
               isUser: false,
-              showDynamicComponent: true,
             }
-
-            setMessages(prev => [...prev, botResponse])
-          } catch (error) {
-            console.error('Error executing code:', error);
-          }
-        })
-        .catch(err => {
-          console.error('Error fetching or transpiling code:', err)
-        })
+            setMessages(prev => [...prev, errorResponse])
+          })
+      } else {
+        const errorResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'Entschuldigung, ich konnte deine Anfrage nicht verarbeiten.',
+          timestamp: new Date().toLocaleTimeString('de-DE', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+          isUser: false,
+        }
+        setMessages(prev => [...prev, errorResponse])
+      }
+    } finally {
+      setLoading(false)
+      setInputValue('')
     }
-
-    setInputValue('')
   }
+
+  const renderSqlResponse = (response: QueryResponse) => {
+    if (!response || !response.result) return null;
+
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-gray-300">Generated SQL:</h4>
+          <pre className="p-3 bg-[#1a1f2e] rounded-md text-gray-300 text-sm overflow-x-auto">
+            <code>{response.sql}</code>
+          </pre>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-gray-300">Results:</h4>
+          {Array.isArray(response.result) && response.result.length > 0 && typeof response.result[0] === 'object' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-gray-400 text-sm">
+                    {Object.keys(response.result[0]).map(header => (
+                      <th key={header} className="py-2 pr-4">{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="text-gray-200">
+                  {response.result.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {Object.values(row).map((value, valueIndex) => (
+                        <td key={valueIndex} className="py-2 pr-4">
+                          {value !== null && value !== undefined ? String(value) : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <pre className="p-3 bg-[#1a1f2e] rounded-md text-gray-300 text-sm overflow-x-auto">
+              {response.formatted_result}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-screen bg-[#1a1f2e] pt-16">
@@ -119,34 +222,12 @@ export function ChatInterface() {
                       <div className="w-8 h-8 rounded-full bg-[#4285f4] text-white flex items-center justify-center">
                         A
                       </div>
-                      <span className="text-gray-400">Accountant</span>
+                      <span className="text-gray-400">Assistant</span>
                     </div>
                     <div className="bg-[#1e2538] rounded-xl p-6 space-y-4">
-                      <h2 className="text-xl text-white font-medium">Aktuelle Buchungen</h2>
-                      <p className="text-gray-400 text-sm">
-                        Hier sind die letzten Buchungen aufgelistet. Alle Beträge sind in EUR.
-                      </p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                          <thead>
-                            <tr className="text-gray-400 text-sm">
-                              <th className="py-2">DATUM</th>
-                              <th className="py-2">BESCHREIBUNG</th>
-                              <th className="py-2">KATEGORIE</th>
-                              <th className="py-2 text-right">BETRAG</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-gray-200">
-                            <tr>
-                              <td className="py-2">2024-02-01</td>
-                              <td className="py-2">Büromaterial</td>
-                              <td className="py-2">Betriebsausgaben</td>
-                              <td className="py-2 text-right">156,78</td>
-                            </tr>
-                            {/* Add more rows as needed */}
-                          </tbody>
-                        </table>
-                      </div>
+                      <div className="text-white">{message.text}</div>
+                      {message.sqlResponse && renderSqlResponse(message.sqlResponse)}
+                      {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
                       <div className="text-sm text-[#4285f4] text-right">
                         {message.timestamp}
                       </div>
@@ -166,8 +247,9 @@ export function ChatInterface() {
               type="text"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
-              placeholder="Type your instructions..."
+              placeholder="Stelle eine Frage oder frage nach Daten..."
               className="w-full bg-[#1e2538] rounded-full pl-12 pr-32 py-4 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#4285f4] border border-[#2a2f3e]"
+              disabled={loading}
             />
             <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center space-x-2">
               <button type="button" className="text-gray-400 hover:text-gray-300 transition-colors">
@@ -178,7 +260,11 @@ export function ChatInterface() {
               <button type="button" className="text-gray-400 hover:text-gray-300 transition-colors">
                 <Mic className="w-5 h-5" />
               </button>
-              <button type="submit" className="text-[#4285f4] hover:text-[#4285f4]/90 transition-colors">
+              <button 
+                type="submit" 
+                className="text-[#4285f4] hover:text-[#4285f4]/90 transition-colors"
+                disabled={loading}
+              >
                 <Send className="w-5 h-5" />
               </button>
             </div>
