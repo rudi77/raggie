@@ -16,10 +16,10 @@ export interface SQLTemplate {
   widget_type: WidgetType;
   refresh_rate: number;
   created_at: string;
-  last_execution: string | null;
+  last_execution?: string;
 }
 
-interface TemplateCreate {
+export interface TemplateCreate {
   query: string;
   source_question: string;
   widget_type: WidgetType;
@@ -41,6 +41,14 @@ class TemplateService {
       TemplateService.instance = new TemplateService();
     }
     return TemplateService.instance;
+  }
+
+  public getAllTemplates(): SQLTemplate[] {
+    return Array.from(this.templates.values());
+  }
+
+  public getTemplate(id: number): SQLTemplate | undefined {
+    return this.templates.get(id);
   }
 
   public async fetchTemplates(): Promise<void> {
@@ -136,14 +144,6 @@ class TemplateService {
       this.eventEmitter.emit('error', error);
       throw error;
     }
-  }
-
-  public getTemplate(id: number): SQLTemplate | undefined {
-    return this.templates.get(id);
-  }
-
-  public getAllTemplates(): SQLTemplate[] {
-    return Array.from(this.templates.values());
   }
 
   public onTemplatesUpdated(callback: (templates: SQLTemplate[]) => void): void {

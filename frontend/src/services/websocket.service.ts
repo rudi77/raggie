@@ -1,5 +1,5 @@
 // Custom EventEmitter implementation for browser
-class EventEmitter {
+export class EventEmitter {
   private events: { [key: string]: Function[] } = {};
 
   on(event: string, callback: Function): void {
@@ -25,7 +25,7 @@ interface WebSocketMessage {
   data?: any;
 }
 
-interface LiveUpdate {
+export interface LiveUpdate {
   template_id: number;
   result: {
     timestamp: string;
@@ -173,5 +173,4 @@ class WebSocketService {
   }
 }
 
-export const websocketService = WebSocketService.getInstance();
-export type { LiveUpdate }; 
+export const websocketService = WebSocketService.getInstance(); 
