@@ -1,39 +1,117 @@
-import { EventEmitter } from './events';
+// Custom EventEmitter implementation for browser
+class CustomEventEmitter {
+  private listeners: {
+    'live_update': ((data: LiveUpdate) => void)[];
+    'connected': (() => void)[];
+    'disconnected': (() => void)[];
+    'error': ((error: Error) => void)[];
+  } = {
+    'live_update': [],
+    'connected': [],
+    'disconnected': [],
+    'error': []
+  };
 
-// Add Vite env type definition
+  on(event: 'live_update', callback: (data: LiveUpdate) => void): void;
+  on(event: 'connected' | 'disconnected', callback: () => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  on(event: string, callback: Function): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event].push(callback);
+    }
+  }
+
+  off(event: 'live_update', callback: (data: LiveUpdate) => void): void;
+  off(event: 'connected' | 'disconnected', callback: () => void): void;
+  off(event: 'error', callback: (error: Error) => void): void;
+  off(event: string, callback: Function): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event] = (this.listeners as any)[event].filter((cb: Function) => cb !== callback);
+    }
+  }
+
+  emit(event: 'live_update', data: LiveUpdate): void;
+  emit(event: 'connected' | 'disconnected'): void;
+  emit(event: 'error', error: Error): void;
+  emit(event: string, data?: any): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event].forEach((callback: Function) => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in event listener for ${event}:`, error);
+        }
+      });
+    }
+  }
+}
+
+// Environment variables type definition
 interface ImportMetaEnv {
-  VITE_API_URL?: string;
+  readonly VITE_WS_URL: string;
+  readonly VITE_WS_FALLBACK_URL?: string;
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
-interface WebSocketMessage {
-  type: string;
-  data?: any;
+// Augment the ImportMeta interface
+declare global {
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
 }
 
 export interface LiveUpdate {
   template_id: number;
   result: {
-    data: any;
+    data: unknown;
     error?: string;
     timestamp: string;
   };
 }
 
-class WebSocketService {
+// Message type definitions
+export type MessageType = 'ping' | 'pong' | 'get_results' | 'live_update';
+
+interface BaseWebSocketMessage {
+  type: MessageType;
+}
+
+interface PingMessage extends BaseWebSocketMessage {
+  type: 'ping';
+  timestamp: number;
+}
+
+interface PongMessage extends BaseWebSocketMessage {
+  type: 'pong';
+  timestamp: number;
+}
+
+interface GetResultsMessage extends BaseWebSocketMessage {
+  type: 'get_results';
+  query: string;
+}
+
+interface LiveUpdateMessage extends BaseWebSocketMessage {
+  type: 'live_update';
+  data: LiveUpdate;
+}
+
+type WebSocketMessage = PingMessage | PongMessage | GetResultsMessage | LiveUpdateMessage;
+
+// WebSocket service class
+export class WebSocketService {
   private static instance: WebSocketService;
-  private ws: WebSocket | null = null;
-  private eventEmitter = new EventEmitter();
+  private socket: WebSocket | null = null;
+  private eventEmitter = new CustomEventEmitter();
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectTimeout = 1000; // Start with 1 second
-  private isConnecting = false;
+  private readonly maxReconnectAttempts = 5;
+  private readonly reconnectDelay = 1000;
+  private heartbeatInterval: number | null = null;
+  private lastPongTime: number = Date.now();
+  private readonly maxMissedPongs = 3;
+  private missedPongs = 0;
 
   private constructor() {
-    // Private constructor for singleton pattern
+    // Private constructor for singleton
   }
 
   public static getInstance(): WebSocketService {
@@ -43,134 +121,147 @@ class WebSocketService {
     return WebSocketService.instance;
   }
 
-  public connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
+  public connect(url?: string): void {
+    if (this.socket?.readyState === WebSocket.OPEN) {
       return;
     }
 
-    this.isConnecting = true;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const backendHost = import.meta.env.VITE_API_URL || 'localhost:9000';
-    const wsUrl = `${protocol}//${backendHost}/api/live`;
-
-    console.log('Attempting to connect to WebSocket:', wsUrl);
+    const wsUrl = url || import.meta.env.VITE_WS_URL || import.meta.env.VITE_WS_FALLBACK_URL;
+    if (!wsUrl) {
+      this.emitError(new Error('No WebSocket URL provided'));
+      return;
+    }
 
     try {
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.onopen = () => {
-        console.log('WebSocket connected successfully');
-        this.reconnectAttempts = 0;
-        this.reconnectTimeout = 1000;
-        this.isConnecting = false;
-        this.eventEmitter.emit('connected');
-      };
-
-      this.ws.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
-        this.isConnecting = false;
-        this.eventEmitter.emit('disconnected');
-        this.attemptReconnect();
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.eventEmitter.emit('error', error);
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Handle ping/pong
-          if (data.type === 'ping') {
-            console.debug('Received ping, sending pong');
-            this.ws?.send(JSON.stringify({ type: 'pong' }));
-            return;
-          }
-          
-          // Handle template results
-          if (data.type === 'template_result') {
-            console.debug('Received template result:', data);
-            this.eventEmitter.emit('live_update', data);
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-
-      // Start heartbeat
-      this.startHeartbeat();
+      this.socket = new WebSocket(wsUrl);
+      this.setupEventListeners();
     } catch (error) {
-      console.error('Error creating WebSocket:', error);
-      this.isConnecting = false;
+      this.emitError(error instanceof Error ? error : new Error('Failed to create WebSocket connection'));
+    }
+  }
+
+  private setupEventListeners(): void {
+    if (!this.socket) return;
+
+    this.socket.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.missedPongs = 0;
+      this.eventEmitter.emit('connected');
+      this.startHeartbeat();
+    };
+
+    this.socket.onclose = () => {
+      this.eventEmitter.emit('disconnected');
+      this.stopHeartbeat();
       this.attemptReconnect();
+    };
+
+    this.socket.onerror = (event) => {
+      this.emitError(new Error('WebSocket error occurred'));
+    };
+
+    this.socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as WebSocketMessage;
+        this.handleMessage(message);
+      } catch (error) {
+        this.emitError(new Error('Invalid message format'));
+      }
+    };
+  }
+
+  private handleMessage(message: WebSocketMessage): void {
+    switch (message.type) {
+      case 'pong':
+        this.handlePong(message);
+        break;
+      case 'live_update':
+        this.eventEmitter.emit('live_update', message.data);
+        break;
+      default:
+        // We don't emit other message types
+        break;
     }
   }
 
   private startHeartbeat(): void {
-    if (!this.ws) return;
-
-    // Send ping every 30 seconds
-    setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        console.debug('Sending ping');
-        this.ws.send(JSON.stringify({ type: 'ping' }));
+    this.heartbeatInterval = window.setInterval(() => {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.sendMessage({
+          type: 'ping',
+          timestamp: Date.now()
+        });
+        
+        // Check if we've missed too many pongs
+        const now = Date.now();
+        if (now - this.lastPongTime > 90000) { // 90 seconds
+          this.missedPongs++;
+          if (this.missedPongs >= 3) {
+            this.disconnect();
+            this.connect(); // Reconnect if we've missed too many pongs
+          }
+        }
       }
     }, 30000);
   }
 
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval !== null) {
+      window.clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private handlePong(message: PongMessage): void {
+    this.lastPongTime = Date.now();
+    this.missedPongs = 0;
+  }
+
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('Max reconnection attempts reached');
+      this.emitError(new Error('Max reconnection attempts reached'));
       return;
     }
 
-    setTimeout(() => {
-      console.log(`Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
+    window.setTimeout(() => {
       this.reconnectAttempts++;
-      this.reconnectTimeout *= 2; // Exponential backoff
       this.connect();
-    }, this.reconnectTimeout);
+    }, delay);
   }
 
   public disconnect(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    this.stopHeartbeat();
+  }
+
+  public sendMessage(message: WebSocketMessage): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      this.emitError(new Error('WebSocket is not connected'));
+      return;
+    }
+
+    try {
+      this.socket.send(JSON.stringify(message));
+    } catch (error) {
+      this.emitError(error instanceof Error ? error : new Error('Failed to send message'));
     }
   }
 
+  private emitError(error: Error): void {
+    this.eventEmitter.emit('error', error);
+  }
+
+  // Convenience methods for live updates
   public onLiveUpdate(callback: (update: LiveUpdate) => void): void {
     this.eventEmitter.on('live_update', callback);
   }
 
   public offLiveUpdate(callback: (update: LiveUpdate) => void): void {
     this.eventEmitter.off('live_update', callback);
-  }
-
-  public onConnected(callback: () => void): void {
-    this.eventEmitter.on('connected', callback);
-  }
-
-  public offConnected(callback: () => void): void {
-    this.eventEmitter.off('connected', callback);
-  }
-
-  public onDisconnected(callback: () => void): void {
-    this.eventEmitter.on('disconnected', callback);
-  }
-
-  public offDisconnected(callback: () => void): void {
-    this.eventEmitter.off('disconnected', callback);
-  }
-
-  public onError(callback: (error: any) => void): void {
-    this.eventEmitter.on('error', callback);
-  }
-
-  public offError(callback: (error: any) => void): void {
-    this.eventEmitter.off('error', callback);
   }
 }
 

@@ -4,6 +4,7 @@ from ...services.scheduler_service import scheduler
 from typing import Dict, Any
 import json
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 if message_type == "ping":
                     # Respond to ping with pong
-                    await websocket.send_json({"type": "pong"})
+                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
                     logger.debug("Responded to ping with pong")
                 elif message_type == "pong":
-                    # Client responded to our ping, do nothing
+                    # Client responded to our ping
                     logger.debug("Received pong from client")
-                    continue
                 elif message_type == "get_results":
                     # Client requesting current results
                     logger.info("Client requested current results")

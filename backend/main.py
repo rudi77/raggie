@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from backend.core.config import settings
-from backend.core.database import templates_engine, Base
+from backend.core.database import templates_engine, Base, create_tables
 from backend.services.text2sql_service import Text2SQLService
 from backend.services.scheduler_service import SchedulerService
 from backend.services.websocket_manager import websocket_manager
@@ -34,44 +34,68 @@ app.include_router(websocket.router)  # Already has prefix in router definition
 app.include_router(text2sql.router)  # Already has prefix in router definition
 
 # Initialize services
-text2sql_service = Text2SQLService(db_path=settings.FINANCE_DB_PATH)
-scheduler_service = SchedulerService(text2sql_service)
+text2sql_service = Text2SQLService(settings.FINANCE_DB_PATH)
+scheduler = None
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Creating database tables...")
-    Base.metadata.create_all(bind=templates_engine)
-    logger.info("Database tables created successfully")
+    """Initialize services and database on startup."""
+    global scheduler
     
-    logger.info(f"Initializing Text2SQLService with finance database: {settings.FINANCE_DB_PATH}")
-    await text2sql_service.initialize()
-    
-    logger.info("Initializing SchedulerService...")
-    await scheduler_service.initialize()
-    
-    logger.info("Starting SchedulerService...")
-    await scheduler_service.start()
-    
-    logger.info("Starting WebSocket health checks...")
-    await websocket_manager.start_health_check()
-    
-    logger.info("Application startup complete")
+    try:
+        logger.info("Creating database tables...")
+        await create_tables()
+        logger.info("Database tables created successfully")
+        
+        # Initialize Text2SQLService
+        logger.info(f"Initializing Text2SQLService with finance database: {settings.FINANCE_DB_PATH}")
+        await text2sql_service.initialize()
+        
+        # Initialize and start SchedulerService
+        logger.info("Initializing SchedulerService...")
+        scheduler = SchedulerService(text2sql_service)
+        await scheduler.initialize()
+        
+        logger.info("Starting SchedulerService...")
+        await scheduler.start()
+        
+        # Start WebSocket health checks
+        logger.info("Starting WebSocket health checks...")
+        await websocket_manager.start_health_check()
+        
+    except Exception as e:
+        logger.error(f"Error during startup: {str(e)}")
+        raise
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Stopping scheduler...")
-    await scheduler_service.stop()
+    """Clean up resources on shutdown."""
+    global scheduler
     
-    logger.info("Stopping WebSocket health checks...")
-    await websocket_manager.stop_health_check()
-    
-    logger.info("Closing WebSocket connections...")
     try:
+        # Stop scheduler first to prevent new queries
+        if scheduler:
+            logger.info("Stopping SchedulerService...")
+            await scheduler.stop()
+            scheduler = None
+        
+        # Stop WebSocket health checks
+        logger.info("Stopping WebSocket health checks...")
+        await websocket_manager.stop_health_check()
+        
+        # Close all WebSocket connections
+        logger.info("Closing all WebSocket connections...")
         await websocket_manager.close_all()
+        
+        # Cleanup text2sql service
+        logger.info("Cleaning up Text2SQL service...")
+        await text2sql_service.cleanup()
+        
+        logger.info("Shutdown completed successfully")
     except Exception as e:
-        logger.error(f"Error during WebSocket cleanup: {str(e)}")
-    
-    logger.info("Application shutdown complete")
+        logger.error(f"Error during shutdown: {str(e)}")
+        logger.exception("Shutdown error details:")
+        raise
 
 @app.get("/")
 async def root():

@@ -88,17 +88,6 @@ class WebSocketManager:
                         # Send ping message
                         await connection.send_json({"type": "ping"})
                         logger.debug("Sent ping to client")
-                        
-                        # Wait for pong response
-                        try:
-                            response = await connection.receive_json()
-                            if response.get("type") == "pong":
-                                logger.debug("Received pong from client")
-                            else:
-                                logger.warning(f"Unexpected response to ping: {response}")
-                        except Exception as e:
-                            logger.error(f"Error receiving pong: {str(e)}")
-                            disconnected.add(connection)
                     except Exception as e:
                         logger.error(f"Error in health check for connection: {str(e)}")
                         disconnected.add(connection)
