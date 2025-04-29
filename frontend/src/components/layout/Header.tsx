@@ -16,7 +16,7 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <h1 className="text-light-primary dark:text-dark-primary text-xl font-medium">iGecko</h1>
-          <span className="text-sm text-light-text-secondary dark:text-dark-text-secondary">| Ihr KI-Buchhaltungsassistent</span>
+          <span className="text-light-text-secondary dark:text-dark-text-secondary font-bold font-large">| CXO-Dashboard</span>
         </div>
         
         <div className="flex items-center space-x-4">

@@ -19,16 +19,16 @@ export default {
           'text-secondary': '#808080',
           border: '#2a2f3e',
         },
-        // Light theme colors (based on screenshot)
+        // Light Grey theme colors
         light: {
-          primary: '#8BC34A',
-          accent: '#8BC34A',
-          background: '#f5f5f5',
+          primary: '#4285f4',
+          accent: '#4285f4',
+          background: '#e0e0e0',
           'background-light': '#ffffff',
-          'background-lighter': '#e0e0e0',
-          text: '#333333',
-          'text-secondary': '#666666',
-          border: '#e0e0e0',
+          'background-lighter': '#e8e8e8',
+          text: '#2c3e50',
+          'text-secondary': '#718096',
+          border: '#e2e8f0',
         }
       },
       height: {
