@@ -26,37 +26,40 @@ Taskliste (mit Aufteilung Frontend/Backend)
 
 🎨 Frontend
 🧱 Komponenten
- [ ] Neue Komponente LiveTileGrid mit mehreren LiveTile-Instanzen
-    [ ] Grid-Layout mit responsivem Design
-    [ ] Automatische Anordnung der Tiles
-    [ ] Loading States für Tiles
+ [x] Neue Komponente LiveTileGrid mit mehreren LiveTile-Instanzen
+    [x] Grid-Layout mit responsivem Design
+    [x] Automatische Anordnung der Tiles
+    [x] Loading States für Tiles
 
- [ ] LiveTile Komponente:
-    [ ] Titel aus source_question
-    [ ] Widget basierend auf widget_type
-    [ ] Error Handling & Display
-    [ ] Refresh-Indikator
-    [ ] Aktualisierungszeitpunkt
-    [ ] Optionaler Reload-Button
+ [x] LiveTile Komponente:
+    [x] Titel aus source_question
+    [x] Widget basierend auf widget_type
+    [x] Error Handling & Display
+    [x] Refresh-Indikator
+    [x] Aktualisierungszeitpunkt
+    [x] Optionaler Reload-Button
 
- [ ] Widget Komponenten:
-    [ ] Tabellen-Widget
-    [ ] Linien-Diagramm
-    [ ] Balken-Diagramm
+ [x] Widget Komponenten:
+    [x] Tabellen-Widget
+    [x] Linien-Diagramm
+    [x] Balken-Diagramm
+    [x] Pie-Chart Widget
+    [x] Number-Widget
+    [x] Text-Widget
     [ ] Erweiterbar für neue Widget-Typen
 
 🌐 Verbindung zu Server
- [ ] WebSocket-Client Service
-    [ ] Verbindungsaufbau & Auto-Reconnect
-    [ ] Health Check Handling
-    [ ] Event System für Updates
- [ ] Template Service
-    [ ] CRUD Operationen für Templates
-    [ ] Caching der Template-Daten
- [ ] State Management
-    [ ] Template-Zustand
-    [ ] Live-Daten Zustand
-    [ ] Verbindungsstatus
+ [x] WebSocket-Client Service
+    [x] Verbindungsaufbau & Auto-Reconnect
+    [x] Health Check Handling
+    [x] Event System für Updates
+ [x] Template Service
+    [x] CRUD Operationen für Templates
+    [x] Caching der Template-Daten
+ [x] State Management
+    [x] Template-Zustand
+    [x] Live-Daten Zustand
+    [x] Verbindungsstatus
 
 📦 Integration
  [ ] Neue Schaltfläche „Als Live-Tile speichern" beim SQL-Ergebnis
