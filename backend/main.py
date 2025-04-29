@@ -4,12 +4,16 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
 from .api.routes import text2sql, query
+from .core.database import create_tables
 
 app = FastAPI(
     title="cxo API",
     description="Backend API for cxo",
     version="0.1.0"
 )
+
+# Create database tables on startup
+create_tables()
 
 # CORS middleware configuration
 app.add_middleware(
