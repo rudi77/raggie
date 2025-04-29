@@ -25,7 +25,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 # Include routers
@@ -49,7 +49,7 @@ async def startup_event():
     logger.info("Initializing SchedulerService...")
     await scheduler_service.initialize()
     
-    logger.info("Starting scheduler...")
+    logger.info("Starting SchedulerService...")
     await scheduler_service.start()
     
     logger.info("Starting WebSocket health checks...")
@@ -66,7 +66,10 @@ async def shutdown_event():
     await websocket_manager.stop_health_check()
     
     logger.info("Closing WebSocket connections...")
-    await websocket_manager.close_all()
+    try:
+        await websocket_manager.close_all()
+    except Exception as e:
+        logger.error(f"Error during WebSocket cleanup: {str(e)}")
     
     logger.info("Application shutdown complete")
 

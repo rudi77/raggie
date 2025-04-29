@@ -1,25 +1,33 @@
-import { EventEmitter } from './websocket.service';
+import { EventEmitter } from './events';
+
+const API_URL = import.meta.env.VITE_API_URL || 'localhost:9000';
+const BASE_URL = `http://${API_URL}`;
 
 export enum WidgetType {
-  TABLE = 'table',
-  LINE_CHART = 'line_chart',
-  BAR_CHART = 'bar_chart',
-  PIE_CHART = 'pie_chart',
-  NUMBER = 'number',
-  TEXT = 'text'
+  TABLE = 'TABLE',
+  LINE_CHART = 'LINE_CHART',
+  BAR_CHART = 'BAR_CHART',
+  PIE_CHART = 'PIE_CHART',
+  NUMBER = 'NUMBER',
+  TEXT = 'TEXT'
 }
 
 export interface SQLTemplate {
   id: number;
+  name: string;
+  description?: string;
   query: string;
   source_question: string;
   widget_type: WidgetType;
   refresh_rate: number;
   created_at: string;
+  updated_at?: string;
   last_execution?: string;
 }
 
 export interface TemplateCreate {
+  name: string;
+  description?: string;
   query: string;
   source_question: string;
   widget_type: WidgetType;
@@ -56,7 +64,7 @@ class TemplateService {
     
     try {
       this.isLoading = true;
-      const response = await fetch('/api/templates');
+      const response = await fetch(`${BASE_URL}/api/templates/`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -79,7 +87,7 @@ class TemplateService {
 
   public async createTemplate(template: TemplateCreate): Promise<SQLTemplate> {
     try {
-      const response = await fetch('/api/templates', {
+      const response = await fetch(`${BASE_URL}/api/templates/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +112,7 @@ class TemplateService {
 
   public async updateTemplate(id: number, template: Partial<TemplateCreate>): Promise<SQLTemplate> {
     try {
-      const response = await fetch(`/api/templates/${id}`, {
+      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +137,7 @@ class TemplateService {
 
   public async deleteTemplate(id: number): Promise<void> {
     try {
-      const response = await fetch(`/api/templates/${id}`, {
+      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
         method: 'DELETE',
       });
 

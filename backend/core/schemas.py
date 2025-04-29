@@ -7,7 +7,7 @@ class SQLTemplateBase(BaseModel):
     name: str
     description: Optional[str] = None
     query: str
-    source_question: Optional[str] = None
+    source_question: str
     widget_type: WidgetType = WidgetType.TABLE
     refresh_rate: int = 0
 

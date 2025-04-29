@@ -6,6 +6,7 @@ import * as Babel from '@babel/standalone'
 import React from 'react'
 import { queryText2Sql, QueryResponse } from '../../services/api'
 import { useTheme } from '../../context/ThemeContext'
+import { SaveTemplateButton } from '../SaveTemplateButton'
 
 interface Message {
   id: string
@@ -154,13 +155,16 @@ export function ChatInterface() {
     }
   }
 
-  const renderSqlResponse = (response: QueryResponse) => {
+  const renderSqlResponse = (response: QueryResponse, question: string) => {
     if (!response || !response.result) return null;
 
     return (
       <div className="space-y-4">
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+            <SaveTemplateButton query={response.sql} sourceQuestion={question} />
+          </div>
           <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
             <code>{response.sql}</code>
           </pre>
@@ -235,52 +239,7 @@ export function ChatInterface() {
                     </div>
                     <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
                       <div className="text-light-text dark:text-dark-text">{message.text}</div>
-                      {message.sqlResponse && (
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
-                            <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
-                              <code>{message.sqlResponse.sql}</code>
-                            </pre>
-                          </div>
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Results:</h4>
-                            {Array.isArray(message.sqlResponse.result) && message.sqlResponse.result.length > 0 && typeof message.sqlResponse.result[0] === 'object' ? (
-                              <div className="overflow-x-auto rounded-lg border border-light-border dark:border-dark-border">
-                                <table className="w-full text-left border-collapse">
-                                  <thead>
-                                    <tr className="border-b border-light-border dark:border-dark-border bg-light-background-lighter dark:bg-dark-background-lighter">
-                                      {Object.keys(message.sqlResponse.result[0]).map(header => (
-                                        <th key={header} className="px-4 py-3 text-sm font-medium text-light-text dark:text-dark-text uppercase tracking-wider">
-                                          {header}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-light-border dark:divide-dark-border">
-                                    {message.sqlResponse.result.map((row, rowIndex) => (
-                                      <tr 
-                                        key={rowIndex}
-                                        className="bg-light-background-light dark:bg-dark-background-light hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors duration-150 ease-in-out"
-                                      >
-                                        {Object.values(row).map((value, valueIndex) => (
-                                          <td key={valueIndex} className="px-4 py-3 text-sm text-light-text dark:text-dark-text whitespace-nowrap">
-                                            {value !== null && value !== undefined ? String(value) : '-'}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
-                                {message.sqlResponse.formatted_result}
-                              </pre>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
                       {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
                       <div className="text-sm text-light-primary dark:text-dark-primary text-right">
                         {message.timestamp}

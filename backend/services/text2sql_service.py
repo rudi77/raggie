@@ -65,29 +65,24 @@ class Text2SQLService:
             raise
 
     async def execute_sql(self, sql_query: str) -> dict:
-        """Execute a raw SQL query directly."""
+        """Execute a raw SQL query."""
+        if not self._initialized:
+            await self.initialize()
+
         try:
-            # Use direct database connection for SQL execution
-            with finance_engine.connect() as connection:
-                result = connection.execute(sql_query)
-                rows = [dict(row) for row in result]
+            logger.info(f"Executing SQL query: {sql_query}")
+            logger.info(f"Using database: {self.db_path}")
             
-            logger.info(f"Executing SQL: {sql_query}")
-            logger.info(f"Raw Result: {rows}")
+            # Execute the query
+            result = await self.agent.execute_sql(sql_query)
             
-            # Format the result as JSON string
-            formatted_result = json.dumps(rows, default=str)
-            
-            return {
-                "sql": sql_query,
-                "result": rows,
-                "formatted_result": formatted_result
-            }
+            logger.info(f"Query execution result: {result}")
+            return result
         except SQLAlchemyError as e:
-            logger.error(f"SQL Error executing query: {str(e)}")
+            logger.error(f"SQLAlchemy error executing query: {str(e)}")
             raise
         except Exception as e:
-            logger.error(f"General error executing SQL: {str(e)}")
+            logger.error(f"Error executing SQL query: {str(e)}")
             raise
 
     async def explain(self, question: str) -> str:

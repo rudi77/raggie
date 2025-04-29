@@ -1,23 +1,12 @@
-// Custom EventEmitter implementation for browser
-export class EventEmitter {
-  private events: { [key: string]: Function[] } = {};
+import { EventEmitter } from './events';
 
-  on(event: string, callback: Function): void {
-    if (!this.events[event]) {
-      this.events[event] = [];
-    }
-    this.events[event].push(callback);
-  }
+// Add Vite env type definition
+interface ImportMetaEnv {
+  VITE_API_URL?: string;
+}
 
-  off(event: string, callback: Function): void {
-    if (!this.events[event]) return;
-    this.events[event] = this.events[event].filter(cb => cb !== callback);
-  }
-
-  emit(event: string, data?: any): void {
-    if (!this.events[event]) return;
-    this.events[event].forEach(callback => callback(data));
-  }
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }
 
 interface WebSocketMessage {
@@ -28,25 +17,20 @@ interface WebSocketMessage {
 export interface LiveUpdate {
   template_id: number;
   result: {
-    timestamp: string;
     data: any;
     error?: string;
-    template_info: {
-      source_question: string;
-      widget_type: string;
-      refresh_rate: number;
-    };
+    timestamp: string;
   };
 }
 
 class WebSocketService {
   private static instance: WebSocketService;
   private ws: WebSocket | null = null;
+  private eventEmitter = new EventEmitter();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimeout = 1000; // Start with 1 second
-  private healthCheckInterval: number | null = null;
-  private eventEmitter = new EventEmitter();
+  private isConnecting = false;
 
   private constructor() {
     // Private constructor for singleton pattern
@@ -60,100 +44,101 @@ class WebSocketService {
   }
 
   public connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
+    if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
       return;
     }
 
+    this.isConnecting = true;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/live`;
+    const backendHost = import.meta.env.VITE_API_URL || 'localhost:9000';
+    const wsUrl = `${protocol}//${backendHost}/api/live`;
 
-    this.ws = new WebSocket(wsUrl);
+    console.log('Attempting to connect to WebSocket:', wsUrl);
 
-    this.ws.onopen = () => {
-      console.log('WebSocket connected');
-      this.reconnectAttempts = 0;
-      this.reconnectTimeout = 1000;
-      this.startHealthCheck();
-    };
+    try {
+      this.ws = new WebSocket(wsUrl);
 
-    this.ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data) as WebSocketMessage;
-        this.handleMessage(message);
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
+      this.ws.onopen = () => {
+        console.log('WebSocket connected successfully');
+        this.reconnectAttempts = 0;
+        this.reconnectTimeout = 1000;
+        this.isConnecting = false;
+        this.eventEmitter.emit('connected');
+      };
 
-    this.ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      this.stopHealthCheck();
+      this.ws.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.code, event.reason);
+        this.isConnecting = false;
+        this.eventEmitter.emit('disconnected');
+        this.attemptReconnect();
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        this.eventEmitter.emit('error', error);
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Handle ping/pong
+          if (data.type === 'ping') {
+            console.debug('Received ping, sending pong');
+            this.ws?.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+          
+          // Handle template results
+          if (data.type === 'template_result') {
+            console.debug('Received template result:', data);
+            this.eventEmitter.emit('live_update', data);
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      };
+
+      // Start heartbeat
+      this.startHeartbeat();
+    } catch (error) {
+      console.error('Error creating WebSocket:', error);
+      this.isConnecting = false;
       this.attemptReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-  }
-
-  private handleMessage(message: WebSocketMessage): void {
-    switch (message.type) {
-      case 'live_update':
-        this.eventEmitter.emit('live_update', message.data as LiveUpdate);
-        break;
-      case 'pong':
-        // Health check response received
-        break;
-      default:
-        console.warn('Unknown message type:', message.type);
     }
   }
 
-  private startHealthCheck(): void {
-    if (this.healthCheckInterval) {
-      window.clearInterval(this.healthCheckInterval);
-    }
+  private startHeartbeat(): void {
+    if (!this.ws) return;
 
-    this.healthCheckInterval = window.setInterval(() => {
+    // Send ping every 30 seconds
+    setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.sendMessage({ type: 'ping' });
+        console.debug('Sending ping');
+        this.ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 30000); // Send ping every 30 seconds
-  }
-
-  private stopHealthCheck(): void {
-    if (this.healthCheckInterval) {
-      window.clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
+    }, 30000);
   }
 
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached');
+      console.log('Max reconnection attempts reached');
       return;
     }
 
-    this.reconnectAttempts++;
-    this.reconnectTimeout *= 2; // Exponential backoff
-
     setTimeout(() => {
-      console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      console.log(`Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+      this.reconnectAttempts++;
+      this.reconnectTimeout *= 2; // Exponential backoff
       this.connect();
     }, this.reconnectTimeout);
   }
 
-  public sendMessage(message: WebSocketMessage): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket is not connected');
+  public disconnect(): void {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
-  }
-
-  public requestResults(): void {
-    this.sendMessage({ type: 'get_results' });
   }
 
   public onLiveUpdate(callback: (update: LiveUpdate) => void): void {
@@ -164,12 +149,28 @@ class WebSocketService {
     this.eventEmitter.off('live_update', callback);
   }
 
-  public disconnect(): void {
-    this.stopHealthCheck();
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+  public onConnected(callback: () => void): void {
+    this.eventEmitter.on('connected', callback);
+  }
+
+  public offConnected(callback: () => void): void {
+    this.eventEmitter.off('connected', callback);
+  }
+
+  public onDisconnected(callback: () => void): void {
+    this.eventEmitter.on('disconnected', callback);
+  }
+
+  public offDisconnected(callback: () => void): void {
+    this.eventEmitter.off('disconnected', callback);
+  }
+
+  public onError(callback: (error: any) => void): void {
+    this.eventEmitter.on('error', callback);
+  }
+
+  public offError(callback: (error: any) => void): void {
+    this.eventEmitter.off('error', callback);
   }
 }
 

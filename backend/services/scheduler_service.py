@@ -14,18 +14,31 @@ logger = logging.getLogger(__name__)
 class ExecutionResult:
     def __init__(self, template_id: int, data: Optional[Dict] = None, error: Optional[str] = None):
         self.timestamp = datetime.now()
-        self.data = data
-        self.error = error
         self.template_id = template_id
         self.template_info = None
+        
+        # Format data to match text2sql/query response
+        if data:
+            self.data = {
+                "sql_query": data.get("sql_query", ""),
+                "result": data.get("result", []),
+                "answer": data.get("answer", ""),
+                "error": error
+            }
+        else:
+            self.data = {
+                "sql_query": "",
+                "result": [],
+                "answer": "",
+                "error": error
+            }
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "timestamp": self.timestamp.isoformat(),
-            "data": self.data,
-            "error": self.error,
             "template_id": self.template_id,
-            "template_info": self.template_info
+            "template_info": self.template_info,
+            "data": self.data
         }
 
 class SchedulerService:
@@ -46,9 +59,13 @@ class SchedulerService:
     async def load_templates(self):
         """Load templates from database."""
         try:
+            logger.info("Loading templates from database")
             with TemplatesSessionLocal() as db:
                 templates = db.query(SQLTemplate).all()
+                logger.info(f"Found {len(templates)} templates")
+                
                 for template in templates:
+                    logger.info(f"Processing template {template.id}: {template.name} (refresh_rate: {template.refresh_rate})")
                     if template.refresh_rate > 0:  # Only schedule templates with refresh rate
                         self.results[template.id] = ExecutionResult(template.id)
                         self.results[template.id].template_info = {
@@ -56,6 +73,9 @@ class SchedulerService:
                             "description": template.description,
                             "refresh_rate": template.refresh_rate
                         }
+                        logger.info(f"Added template {template.id} to scheduler")
+                
+                logger.info(f"Loaded {len(self.results)} templates with active refresh rates")
         except Exception as e:
             logger.error(f"Error loading templates: {str(e)}")
             raise
@@ -64,20 +84,38 @@ class SchedulerService:
         """Start the scheduler."""
         if not self.running:
             self.running = True
-            asyncio.create_task(self._scheduler_loop())
-            logger.info("Scheduler started")
+            logger.info("Starting scheduler and executing initial template cycle")
+            
+            # Execute templates immediately
+            try:
+                await self._execute_templates()
+            except Exception as e:
+                logger.error(f"Error during initial template execution: {str(e)}")
+            
+            # Start the scheduler loop
+            self._scheduler_task = asyncio.create_task(self._scheduler_loop())
+            logger.info("Scheduler loop started")
 
     async def stop(self):
         """Stop the scheduler."""
         self.running = False
+        if hasattr(self, '_scheduler_task'):
+            try:
+                self._scheduler_task.cancel()
+                await self._scheduler_task
+            except asyncio.CancelledError:
+                pass
         logger.info("Scheduler stopped")
 
     async def _scheduler_loop(self):
         """Main scheduler loop."""
+        logger.info("Scheduler loop started")
         while self.running:
             try:
+                logger.info("Starting scheduler cycle")
                 await self._execute_templates()
                 await self._cleanup_old_results()
+                logger.info(f"Scheduler cycle complete, sleeping for {self.interval} seconds")
                 await asyncio.sleep(self.interval)
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {str(e)}")
@@ -85,6 +123,7 @@ class SchedulerService:
 
     async def _execute_templates(self):
         """Execute all templates that need to be refreshed."""
+        logger.info("Starting template execution cycle")
         for template_id, result in self.results.items():
             try:
                 with TemplatesSessionLocal() as db:
@@ -93,16 +132,25 @@ class SchedulerService:
                         # Check if it's time to refresh
                         if not result.timestamp or \
                            (datetime.now() - result.timestamp).total_seconds() >= template.refresh_rate:
+                            logger.info(f"Executing template {template_id}: {template.name}")
+                            logger.info(f"SQL Query: {template.query}")
+                            
                             # Execute the template
                             new_result = await self.execute_template(template)
                             self.results[template_id] = new_result
                             
-                            # Broadcast the result
-                            await websocket_manager.broadcast({
+                            # Format and broadcast the result
+                            broadcast_data = {
                                 "type": "template_result",
                                 "template_id": template_id,
-                                "result": new_result.to_dict()
-                            })
+                                "result": {
+                                    "data": new_result.data,
+                                    "error": new_result.data.get("error"),
+                                    "timestamp": new_result.timestamp.isoformat()
+                                }
+                            }
+                            logger.info(f"Broadcasting result for template {template_id}: {broadcast_data}")
+                            await websocket_manager.broadcast(template_id, broadcast_data)
             except Exception as e:
                 logger.error(f"Error executing template {template_id}: {str(e)}")
                 self.results[template_id] = ExecutionResult(
@@ -120,8 +168,10 @@ class SchedulerService:
     async def execute_template(self, template: SQLTemplate) -> ExecutionResult:
         """Execute a single template and return the result."""
         try:
+            logger.info(f"Executing SQL for template {template.id}: {template.name}")
             # Execute the SQL query
             result = await self.text2sql_service.execute_sql(template.query)
+            logger.info(f"SQL execution result: {result}")
             
             # Create execution result
             execution_result = ExecutionResult(template.id, data=result)
