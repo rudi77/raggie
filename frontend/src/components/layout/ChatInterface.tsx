@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
 import { queryText2Sql, QueryResponse } from '../../services/api'
+import { useTheme } from '../../context/ThemeContext'
 
 interface Message {
   id: string
@@ -20,6 +21,7 @@ export function ChatInterface() {
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
+  const { theme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -157,34 +159,34 @@ export function ChatInterface() {
     return (
       <div className="space-y-4">
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-gray-300">Generated SQL:</h4>
-          <pre className="p-3 bg-[#1a1f2e] rounded-md text-gray-300 text-sm overflow-x-auto">
+          <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+          <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
             <code>{response.sql}</code>
           </pre>
         </div>
 
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-gray-300">Results:</h4>
+          <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Results:</h4>
           {Array.isArray(response.result) && response.result.length > 0 && typeof response.result[0] === 'object' ? (
-            <div className="overflow-x-auto rounded-lg border border-gray-700">
+            <div className="overflow-x-auto rounded-lg border border-light-border dark:border-dark-border">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-700 bg-gray-800">
+                  <tr className="border-b border-light-border dark:border-dark-border bg-light-background-lighter dark:bg-dark-background-lighter">
                     {Object.keys(response.result[0]).map(header => (
-                      <th key={header} className="px-4 py-3 text-sm font-medium text-gray-300 uppercase tracking-wider">
+                      <th key={header} className="px-4 py-3 text-sm font-medium text-light-text dark:text-dark-text uppercase tracking-wider">
                         {header}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700">
+                <tbody className="divide-y divide-light-border dark:divide-dark-border">
                   {response.result.map((row, rowIndex) => (
                     <tr 
                       key={rowIndex}
-                      className="bg-[#1e2538] hover:bg-gray-800 transition-colors duration-150 ease-in-out"
+                      className="bg-light-background-light dark:bg-dark-background-light hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors duration-150 ease-in-out"
                     >
                       {Object.values(row).map((value, valueIndex) => (
-                        <td key={valueIndex} className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">
+                        <td key={valueIndex} className="px-4 py-3 text-sm text-light-text dark:text-dark-text whitespace-nowrap">
                           {value !== null && value !== undefined ? String(value) : '-'}
                         </td>
                       ))}
@@ -194,7 +196,7 @@ export function ChatInterface() {
               </table>
             </div>
           ) : (
-            <pre className="p-3 bg-[#1a1f2e] rounded-md text-gray-300 text-sm overflow-x-auto">
+            <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
               {response.formatted_result}
             </pre>
           )}
@@ -204,7 +206,7 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#1a1f2e] pt-16">
+    <div className="flex flex-col h-screen bg-light-background dark:bg-dark-background pt-16">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-6">
           <div className="w-full min-h-full py-6">
@@ -213,10 +215,10 @@ export function ChatInterface() {
                 {message.isUser ? (
                   <div className="flex justify-end">
                     <div className="max-w-[240px]">
-                      <div className="bg-[#4285f4] text-white px-4 py-2 rounded-xl">
+                      <div className="bg-light-primary dark:bg-dark-primary text-white px-4 py-2 rounded-xl">
                         {message.text}
                       </div>
-                      <div className="text-sm text-[#4285f4] mt-1 text-right">
+                      <div className="text-sm text-light-primary dark:text-dark-primary mt-1 text-right">
                         {message.timestamp}
                       </div>
                     </div>
@@ -224,16 +226,61 @@ export function ChatInterface() {
                 ) : (
                   <div className="flex flex-col space-y-2">
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-[#4285f4] text-white flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-light-primary dark:bg-dark-primary text-white flex items-center justify-center">
                         A
                       </div>
-                      <span className="text-gray-400">Assistant</span>
+                      <span className="text-light-text-secondary dark:text-dark-text-secondary">Assistant</span>
                     </div>
-                    <div className="bg-[#1e2538] rounded-xl p-6 space-y-4">
-                      <div className="text-white">{message.text}</div>
-                      {message.sqlResponse && renderSqlResponse(message.sqlResponse)}
+                    <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
+                      <div className="text-light-text dark:text-dark-text">{message.text}</div>
+                      {message.sqlResponse && (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+                            <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
+                              <code>{message.sqlResponse.sql}</code>
+                            </pre>
+                          </div>
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Results:</h4>
+                            {Array.isArray(message.sqlResponse.result) && message.sqlResponse.result.length > 0 && typeof message.sqlResponse.result[0] === 'object' ? (
+                              <div className="overflow-x-auto rounded-lg border border-light-border dark:border-dark-border">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-light-border dark:border-dark-border bg-light-background-lighter dark:bg-dark-background-lighter">
+                                      {Object.keys(message.sqlResponse.result[0]).map(header => (
+                                        <th key={header} className="px-4 py-3 text-sm font-medium text-light-text dark:text-dark-text uppercase tracking-wider">
+                                          {header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-light-border dark:divide-dark-border">
+                                    {message.sqlResponse.result.map((row, rowIndex) => (
+                                      <tr 
+                                        key={rowIndex}
+                                        className="bg-light-background-light dark:bg-dark-background-light hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors duration-150 ease-in-out"
+                                      >
+                                        {Object.values(row).map((value, valueIndex) => (
+                                          <td key={valueIndex} className="px-4 py-3 text-sm text-light-text dark:text-dark-text whitespace-nowrap">
+                                            {value !== null && value !== undefined ? String(value) : '-'}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
+                                {message.sqlResponse.formatted_result}
+                              </pre>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
-                      <div className="text-sm text-[#4285f4] text-right">
+                      <div className="text-sm text-light-primary dark:text-dark-primary text-right">
                         {message.timestamp}
                       </div>
                     </div>
@@ -245,7 +292,7 @@ export function ChatInterface() {
         </div>
       </div>
 
-      <div className="border-t border-[#2a2f3e] bg-[#1a1f2e] py-6">
+      <div className="border-t border-light-border dark:border-dark-border bg-light-background dark:bg-dark-background py-6">
         <div className="max-w-2xl mx-auto px-4">
           <form onSubmit={handleSubmit} className="relative">
             <input
@@ -253,28 +300,28 @@ export function ChatInterface() {
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               placeholder="Stelle eine Frage oder frage nach Daten..."
-              className="w-full bg-[#1e2538] rounded-full pl-12 pr-32 py-4 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#4285f4] border border-[#2a2f3e]"
+              className="w-full bg-light-background-light dark:bg-dark-background-light rounded-full pl-12 pr-32 py-4 text-light-text dark:text-dark-text placeholder-light-text-secondary dark:placeholder-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-light-primary dark:focus:ring-dark-primary border border-light-border dark:border-dark-border"
               disabled={loading}
             />
             <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center space-x-2">
-              <button type="button" className="text-gray-400 hover:text-gray-300 transition-colors">
+              <button type="button" className="text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text dark:hover:text-dark-text transition-colors">
                 <Paperclip className="w-5 h-5" />
               </button>
             </div>
             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-4">
-              <button type="button" className="text-gray-400 hover:text-gray-300 transition-colors">
+              <button type="button" className="text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text dark:hover:text-dark-text transition-colors">
                 <Mic className="w-5 h-5" />
               </button>
               <button 
                 type="submit" 
-                className="text-[#4285f4] hover:text-[#4285f4]/90 transition-colors"
+                className="text-light-primary dark:text-dark-primary hover:text-light-primary/90 dark:hover:text-dark-primary/90 transition-colors"
                 disabled={loading}
               >
                 <Send className="w-5 h-5" />
               </button>
             </div>
           </form>
-          <div className="text-xs text-gray-500 mt-2 text-center">
+          <div className="text-xs text-light-text-secondary dark:text-dark-text-secondary mt-2 text-center">
             Press Enter to send, Shift + Enter for new line
           </div>
         </div>

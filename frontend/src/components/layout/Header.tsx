@@ -1,7 +1,7 @@
 'use client'
 
 import { Sun, Moon } from 'lucide-react'
-import { useTheme } from '@/context/ThemeContext'
+import { useTheme } from '../../context/ThemeContext'
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
@@ -12,29 +12,29 @@ export function Header() {
   })
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-black border-b border-[#1a1a1a] z-50">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-light-background-light dark:bg-dark-background border-b border-light-border dark:border-dark-border z-50">
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <h1 className="text-[#4285f4] text-xl font-medium">iGecko</h1>
-          <span className="text-sm text-gray-400">| CxO</span>
+          <h1 className="text-light-primary dark:text-dark-primary text-xl font-medium">iGecko</h1>
+          <span className="text-sm text-light-text-secondary dark:text-dark-text-secondary">| Ihr KI-Buchhaltungsassistent</span>
         </div>
         
         <div className="flex items-center space-x-4">
-          <span className="text-[#4285f4] text-sm">{currentTime}</span>
+          <span className="text-light-primary dark:text-dark-primary text-sm">{currentTime}</span>
           <button
             onClick={toggleTheme}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#1a1a1a] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-gray-400" />
+              <Sun className="w-4 h-4 text-light-text-secondary dark:text-dark-text-secondary" />
             ) : (
-              <Moon className="w-4 h-4 text-gray-400" />
+              <Moon className="w-4 h-4 text-light-text-secondary dark:text-dark-text-secondary" />
             )}
           </button>
-          {/* <button className="px-3 py-1 bg-[#4285f4]/20 text-[#4285f4] text-sm rounded-md">
-            22M2fu
-          </button> */}
+          <div className="px-3 py-1 bg-light-primary/20 dark:bg-dark-primary/20 text-light-primary dark:text-dark-primary text-sm rounded-md">
+            Version 1.0
+          </div>
         </div>
       </div>
     </header>
