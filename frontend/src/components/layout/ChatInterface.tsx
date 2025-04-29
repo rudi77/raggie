@@ -208,13 +208,13 @@ export function ChatInterface() {
   return (
     <div className="flex flex-col h-screen bg-light-background dark:bg-dark-background pt-16">
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="w-full min-h-full py-6">
             {messages.map(message => (
               <div key={message.id} className="mb-4">
                 {message.isUser ? (
                   <div className="flex justify-end">
-                    <div className="max-w-[240px]">
+                    <div className="max-w-[600px]">
                       <div className="bg-light-primary dark:bg-dark-primary text-white px-4 py-2 rounded-xl">
                         {message.text}
                       </div>
@@ -293,7 +293,7 @@ export function ChatInterface() {
       </div>
 
       <div className="border-t border-light-border dark:border-dark-border bg-light-background dark:bg-dark-background py-6">
-        <div className="max-w-2xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4">
           <form onSubmit={handleSubmit} className="relative">
             <input
               type="text"
