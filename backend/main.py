@@ -5,6 +5,7 @@ from typing import List, Optional
 import uvicorn
 from .api.routes import text2sql, query, templates
 from .core.database import create_tables
+from .services.scheduler_service import scheduler
 
 app = FastAPI(
     title="cxo API",
@@ -14,6 +15,16 @@ app = FastAPI(
 
 # Create database tables on startup
 create_tables()
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the scheduler on app startup"""
+    await scheduler.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the scheduler on app shutdown"""
+    await scheduler.stop()
 
 # CORS middleware configuration
 app.add_middleware(

@@ -9,11 +9,11 @@ Taskliste (mit Aufteilung Frontend/Backend)
  [x] DELETE /api/templates/{id} – Template löschen
 
 🔁 Scheduler
- [ ] Starte beim App-Start einen BackgroundTask mit periodischem Scheduler (z. B. mit asyncio.create_task)
- [ ] Führe für jedes Template regelmäßig das SQL-Statement aus
- [ ] Speichere das Ergebnis in Memory
- [ ] Sende die Daten über WebSocket oder SSE an das Frontend
- [ ] Nutze bestehende Text2SQLService oder direkte DB-Verbindung
+ [x] Starte beim App-Start einen BackgroundTask mit periodischem Scheduler (asyncio.create_task)
+ [x] Führe für jedes Template regelmäßig das SQL-Statement aus (Basis-Implementierung)
+ [x] Speichere das Ergebnis in Memory
+ [ ] Implementiere tatsächliche Query-Ausführung mit Text2SQLService
+ [ ] Implementiere Broadcast an WebSocket-Clients
 
 📡 WebSocket/SSE
  [ ] Endpunkt: GET /api/live (WebSocket oder /events für SSE)
