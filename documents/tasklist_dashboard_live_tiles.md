@@ -13,11 +13,12 @@ Taskliste (mit Aufteilung Frontend/Backend)
  [x] Führe für jedes Template regelmäßig das SQL-Statement aus (Basis-Implementierung)
  [x] Speichere das Ergebnis in Memory
  [x] Implementiere tatsächliche Query-Ausführung mit Text2SQLService
- [ ] Implementiere Broadcast an WebSocket-Clients
+ [x] Implementiere Broadcast an WebSocket-Clients
 
 📡 WebSocket/SSE
- [ ] Endpunkt: GET /api/live (WebSocket oder /events für SSE)
- [ ] Broadcast der neuen Ergebnisse (z. B. als JSON { template_id, result })
+ [x] Endpunkt: GET /api/live (WebSocket)
+ [x] Broadcast der neuen Ergebnisse (als JSON { template_id, result })
+ [x] Connection Management (connect/disconnect handling)
 
 🎨 Frontend
 🧱 Komponenten

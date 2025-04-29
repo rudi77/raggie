@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-from .api.routes import text2sql, query, templates
+from .api.routes import text2sql, query, templates, websocket
 from .core.database import create_tables
 from .services.scheduler_service import SchedulerService
 from .services.text2sql_service import Text2SQLService
@@ -48,6 +48,7 @@ app.add_middleware(
 app.include_router(text2sql.router)
 app.include_router(query.router)
 app.include_router(templates.router)
+app.include_router(websocket.router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

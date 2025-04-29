@@ -3,6 +3,7 @@ import asyncio
 import json
 from text2sql.agent.sql_agent import SQLAgent
 from llama_index.llms.openai import OpenAI
+from sqlalchemy.exc import SQLAlchemyError
 
 class Text2SQLService:
     def __init__(self, db_path: str, openai_api_key: str):
@@ -34,15 +35,14 @@ class Text2SQLService:
                 "formatted_result": formatted_result
             }
         except Exception as e:
-            # Log the error and re-raise
             print(f"Error in Text2SQL query: {str(e)}")
             raise
 
     async def execute_sql(self, sql_query: str) -> dict:
         """Execute a raw SQL query directly."""
         try:
-            # Use the agent's execute_sql method to run the query
-            result = await self.agent.execute_sql(sql_query)
+            # Use direct database connection for SQL execution
+            result = await self.agent.db.execute_query(sql_query)
             
             print("\nExecuting SQL:", sql_query)
             print("\nRaw Result:", result)
@@ -55,19 +55,19 @@ class Text2SQLService:
                 "result": result,
                 "formatted_result": formatted_result
             }
+        except SQLAlchemyError as e:
+            print(f"SQL Error executing query: {str(e)}")
+            raise
         except Exception as e:
-            # Log the error and re-raise
-            print(f"Error executing SQL: {str(e)}")
+            print(f"General error executing SQL: {str(e)}")
             raise
 
     async def explain(self, question: str) -> str:
         """Get SQL explanation for a question without executing it."""
-        # For now, we'll just return the SQL query without executing it
         try:
             # Use the agent's query method but only return the SQL part
             result = await self.agent.query(question)
             return result["sql_query"]
         except Exception as e:
-            # Log the error and re-raise
             print(f"Error in Text2SQL explain: {str(e)}")
             raise
