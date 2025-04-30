@@ -78,9 +78,25 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
       width: '100%', 
       height: '100%', 
       minWidth: '500px',
+      backgroundColor: theme.palette.background.paper,
+      borderRadius: theme.shape.borderRadius,
+      boxShadow: theme.shadows[2],
+      p: 2,
       '& .recharts-responsive-container': {
         minWidth: '500px !important',
         width: '100% !important'
+      },
+      '& .recharts-cartesian-grid-horizontal line, & .recharts-cartesian-grid-vertical line': {
+        stroke: theme.palette.divider
+      },
+      '& .recharts-text': {
+        fill: theme.palette.text.primary
+      },
+      '& .recharts-legend-item-text': {
+        color: `${theme.palette.text.primary} !important`
+      },
+      '& .recharts-tooltip-wrapper': {
+        outline: 'none'
       }
     }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -90,19 +106,25 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
             top: 5,
             right: 30,
             left: 20,
-            bottom: 25, // Increased to accommodate x-axis labels
+            bottom: 25,
           }}
         >
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid 
+            strokeDasharray="3 3" 
+            stroke={theme.palette.divider}
+            vertical={false}
+          />
           <XAxis
             dataKey={Object.keys(data[0])[0]}
             tick={{ fill: theme.palette.text.primary }}
+            stroke={theme.palette.divider}
             angle={-45}
             textAnchor="end"
             height={60}
           />
           <YAxis 
             tick={{ fill: theme.palette.text.primary }}
+            stroke={theme.palette.divider}
             width={60}
           />
           <Tooltip
@@ -110,18 +132,32 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
               backgroundColor: theme.palette.background.paper,
               border: `1px solid ${theme.palette.divider}`,
               borderRadius: theme.shape.borderRadius,
+              boxShadow: theme.shadows[3],
+              color: theme.palette.text.primary
             }}
             labelStyle={{ color: theme.palette.text.primary }}
+            itemStyle={{ color: theme.palette.text.primary }}
+            cursor={{ stroke: theme.palette.divider }}
           />
-          <Legend wrapperStyle={{ paddingTop: '10px' }}/>
+          <Legend 
+            wrapperStyle={{ 
+              paddingTop: '10px',
+              color: theme.palette.text.primary
+            }}
+          />
           {keys.map((key, index) => (
             <Line
               key={key}
               type="monotone"
               dataKey={key}
               stroke={colors[index]}
-              activeDot={{ r: 8 }}
+              strokeWidth={2}
               dot={false}
+              activeDot={{ 
+                r: 8,
+                stroke: theme.palette.background.paper,
+                strokeWidth: 2
+              }}
             />
           ))}
         </LineChart>

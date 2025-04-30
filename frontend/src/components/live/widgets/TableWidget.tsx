@@ -9,7 +9,8 @@ import {
   Paper,
   Typography,
   useTheme,
-  Box
+  Box,
+  alpha
 } from '@mui/material';
 
 interface TableWidgetProps {
@@ -47,15 +48,19 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
           width: '100%',
           backgroundColor: theme.palette.background.paper,
           overflow: 'auto',
+          borderRadius: theme.shape.borderRadius,
+          boxShadow: theme.shadows[2],
           '& .MuiTableCell-root': {
             borderColor: theme.palette.divider,
             whiteSpace: 'nowrap', // Prevent text wrapping
             padding: '8px 16px', // Consistent padding
+            color: theme.palette.text.primary,
             '&:first-of-type': {
               position: 'sticky',
               left: 0,
               backgroundColor: theme.palette.background.paper,
-              zIndex: 2
+              zIndex: 2,
+              borderRight: `1px solid ${theme.palette.divider}`
             }
           },
           '& .MuiTable-root': {
@@ -68,13 +73,19 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
             width: '8px'
           },
           '&::-webkit-scrollbar-track': {
-            background: theme.palette.background.default
+            background: theme.palette.mode === 'dark' 
+              ? theme.palette.grey[800] 
+              : theme.palette.grey[200]
           },
           '&::-webkit-scrollbar-thumb': {
-            background: theme.palette.grey[400],
+            background: theme.palette.mode === 'dark'
+              ? theme.palette.grey[600]
+              : theme.palette.grey[400],
             borderRadius: '4px',
             '&:hover': {
-              background: theme.palette.grey[500]
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[500]
+                : theme.palette.grey[500]
             }
           }
         }}
@@ -86,14 +97,18 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
                 <TableCell 
                   key={column}
                   sx={{
-                    backgroundColor: theme.palette.background.default,
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? theme.palette.grey[900]
+                      : theme.palette.grey[100],
                     color: theme.palette.text.primary,
-                    fontWeight: 'bold',
+                    fontWeight: 600,
                     width: columnWidth,
                     minWidth: columnWidth,
                     maxWidth: columnWidth,
                     '&:first-of-type': {
-                      backgroundColor: theme.palette.background.default,
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? theme.palette.grey[900]
+                        : theme.palette.grey[100],
                       zIndex: 3 // Above sticky column cells
                     }
                   }}
@@ -109,15 +124,23 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
                 key={rowIndex}
                 sx={{
                   '&:nth-of-type(odd)': {
-                    backgroundColor: theme.palette.action.hover,
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.05)
+                      : alpha(theme.palette.primary.main, 0.02),
                     '& .MuiTableCell-root:first-of-type': {
-                      backgroundColor: theme.palette.action.hover
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.05)
+                        : alpha(theme.palette.primary.main, 0.02)
                     }
                   },
                   '&:hover': {
-                    backgroundColor: theme.palette.action.selected,
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.1)
+                      : alpha(theme.palette.primary.main, 0.05),
                     '& .MuiTableCell-root:first-of-type': {
-                      backgroundColor: theme.palette.action.selected
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.primary.main, 0.05)
                     }
                   }
                 }}
@@ -126,7 +149,6 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
                   <TableCell 
                     key={`${rowIndex}-${column}`}
                     sx={{
-                      color: theme.palette.text.primary,
                       width: columnWidth,
                       minWidth: columnWidth,
                       maxWidth: columnWidth,
