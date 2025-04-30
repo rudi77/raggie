@@ -19,6 +19,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # Connect with initial data from scheduler if available
         initial_data = scheduler.results if scheduler and hasattr(scheduler, 'results') else {}
+        logger.info(f"Initial data for WebSocket connection: {initial_data}")
         await websocket_manager.connect(websocket, initial_data)
         logger.info("WebSocket client connected and received initial data")
         
@@ -36,8 +37,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 if message_type == "ping":
                     # Respond to ping with pong
-                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
-                    logger.debug("Responded to ping with pong")
+                    pong_message = {"type": "pong", "timestamp": datetime.now().isoformat()}
+                    logger.debug(f"Sending pong message: {pong_message}")
+                    await websocket.send_json(pong_message)
                 elif message_type == "pong":
                     # Client responded to our ping
                     logger.debug("Received pong from client")
@@ -46,6 +48,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.info("Client requested current results")
                     if scheduler and hasattr(scheduler, 'results'):
                         for template_id, result in scheduler.results.items():
+                            logger.debug(f"Broadcasting result for template {template_id}: {result.to_dict()}")
                             await websocket_manager.broadcast(template_id, result)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")

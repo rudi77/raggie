@@ -44,7 +44,7 @@ export const LiveTileGrid: React.FC = () => {
     loadTemplates();
     websocketService.connect();
 
-    // Cleanup
+    // Cleanup - properly disconnect when component unmounts
     return () => {
       websocketService.disconnect();
     };
@@ -53,6 +53,11 @@ export const LiveTileGrid: React.FC = () => {
   // Handle live updates
   useEffect(() => {
     const handleLiveUpdate = (update: LiveUpdate) => {
+      if (!update || !update.template_id) {
+        console.warn('Received invalid live update:', update);
+        return;
+      }
+
       setTiles(prevTiles => {
         const newTiles = new Map(prevTiles);
         const tile = newTiles.get(update.template_id);
@@ -60,10 +65,12 @@ export const LiveTileGrid: React.FC = () => {
         if (tile) {
           newTiles.set(update.template_id, {
             ...tile,
-            data: update.result.data.result,
-            error: update.result.error,
-            lastUpdate: update.result.timestamp
+            data: update.data?.result || null,
+            error: update.error,
+            lastUpdate: update.timestamp || new Date().toISOString()
           });
+        } else {
+          console.warn(`Received update for unknown template ID: ${update.template_id}`);
         }
         
         return newTiles;

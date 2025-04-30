@@ -44,11 +44,12 @@ class WebSocketManager:
     async def broadcast(self, template_id: int, data: dict):
         """Broadcast data to all connected clients"""
         try:
-            # Format the message
+            # Format the message to match frontend's LiveUpdate interface
             message = {
-                "type": data.get("type", "template_result"),
-                "template_id": template_id,
-                "result": {
+                "type": "live_update",
+                "data": {
+                    "template_id": template_id,
+                    "template_info": data.get("template_info"),
                     "data": data.get("data", {}),
                     "error": data.get("error"),
                     "timestamp": data.get("timestamp", datetime.now().isoformat())
