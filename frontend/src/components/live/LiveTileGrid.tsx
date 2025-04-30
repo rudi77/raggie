@@ -155,29 +155,26 @@ export const LiveTileGrid: React.FC = () => {
       sx={{ 
         p: 3,
         width: '100%',
-        margin: 0, // Remove default margin
+        margin: 0,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(500px, 1fr))',
+        gap: '24px',
         '& .MuiGrid-item': {
-          paddingTop: 3, // Consistent padding
-          paddingLeft: 3, // Consistent padding
-          minWidth: '500px', // Minimum width for grid items
-          flex: '1 1 500px', // Flex grow/shrink with minimum width
-          maxWidth: 'calc(100% - 24px)' // Prevent overflow
+          padding: 0,
+          width: '100%',
+          maxWidth: '100%',
+          flexBasis: '100%'
         }
       }}
     >
       {Array.from(tiles.values()).map(({ template, data, error, lastUpdate }) => (
         <Grid 
           item 
-          xs={12} 
-          sm={6} 
-          md={4} 
-          lg={3} 
           key={template.id}
           sx={{
-            display: 'flex', // Enable flex layout
-            '& > *': { // Target the LiveTile component
-              width: '100%', // Ensure the tile takes full width
-              minWidth: '500px' // Consistent minimum width
+            display: 'flex',
+            '& > *': {
+              width: '100%'
             }
           }}
         >
