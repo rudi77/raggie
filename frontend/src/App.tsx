@@ -18,8 +18,8 @@ export default function App() {
                 <LiveTileGrid />
               </div>
             </div>
-            <ChatInterface />
           </div>
+          <ChatInterface />
         </main>
       </div>
     </ThemeProvider>
