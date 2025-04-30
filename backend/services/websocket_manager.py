@@ -57,7 +57,7 @@ class WebSocketManager:
             
             # Convert to JSON string
             json_message = json.dumps(message)
-            logger.info(f"Broadcasting message for template {template_id}: {json_message}")
+            logger.debug(f"Broadcasting message for template {template_id}: {json_message}")
             
             # Send to all connected clients
             disconnected = set()

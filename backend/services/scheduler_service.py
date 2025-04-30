@@ -98,7 +98,7 @@ class SchedulerService:
         
         while self.running:
             try:
-                # Load templates if not already loaded
+                # Load templates if not already loadedJ
                 if not self.templates:
                     await self.load_templates()
                 
