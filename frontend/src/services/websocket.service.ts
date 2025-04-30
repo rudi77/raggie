@@ -126,7 +126,7 @@ export class WebSocketService {
       return;
     }
 
-    const wsUrl = url || import.meta.env.VITE_WS_URL || import.meta.env.VITE_WS_FALLBACK_URL;
+    const wsUrl = url || import.meta.env.VITE_WS_URL || 'ws://localhost:5173/api/live';
     if (!wsUrl) {
       this.emitError(new Error('No WebSocket URL provided'));
       return;

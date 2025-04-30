@@ -22,7 +22,6 @@ class Text2SQLService:
         self.llm = None
         self.engine = finance_engine
         self._initialized = False
-        self._session: Optional[AsyncSession] = None
 
     async def initialize(self):
         """Initialize the service with OpenAI API key."""
@@ -37,11 +36,8 @@ class Text2SQLService:
             logger.info(f"Initializing SQLAgent with database: {self.db_path}")
             self.agent = SQLAgent(database_url=f"sqlite:///{self.db_path}", llm=self.llm)
             
-            # Create a session
-            self._session = AsyncFinanceSessionLocal()
-            
-            # Verify database connection
-            async with self._session as session:
+            # Test database connection
+            async with AsyncFinanceSessionLocal() as session:
                 result = await session.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if row is None:
@@ -52,16 +48,10 @@ class Text2SQLService:
             logger.info("Text2SQL service initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing Text2SQL service: {str(e)}")
-            if self._session:
-                await self._session.close()
-                self._session = None
             raise
 
     async def cleanup(self):
         """Cleanup resources."""
-        if self._session:
-            await self._session.close()
-            self._session = None
         self._initialized = False
 
     async def query(self, question: str) -> dict:
@@ -129,20 +119,17 @@ class Text2SQLService:
         if not self._initialized:
             await self.initialize()
 
-        try:
-            async with self._session as session:
-                result = await session.execute(text(sql_query))
-                if result.returns_rows:
-                    # Convert results to list of dictionaries
-                    keys = result.keys()
-                    rows = [dict(zip(keys, row)) for row in result.fetchall()]
-                    await session.commit()
-                    return rows
-                else:
-                    await session.commit()
+        async with AsyncFinanceSessionLocal() as session:
+            try:
+                # Start a new transaction
+                async with session.begin():
+                    result = await session.execute(text(sql_query))
+                    if result.returns_rows:
+                        # Convert results to list of dictionaries
+                        keys = result.keys()
+                        rows = [dict(zip(keys, row)) for row in result.fetchall()]
+                        return rows
                     return []
-        except Exception as e:
-            logger.error(f"Error executing SQL query: {str(e)}")
-            if 'session' in locals():
-                await session.rollback()
-            raise
+            except Exception as e:
+                logger.error(f"Error executing SQL query: {str(e)}")
+                raise

@@ -1,7 +1,7 @@
 import { EventEmitter } from './events';
 
-const API_URL = import.meta.env.VITE_API_URL || 'localhost:9000';
-const BASE_URL = `http://${API_URL}`;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5173';
+const BASE_URL = API_URL;
 
 export enum WidgetType {
   TABLE = 'TABLE',

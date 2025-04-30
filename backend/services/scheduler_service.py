@@ -52,6 +52,7 @@ class SchedulerService:
         self.interval = 60  # Default interval in seconds
         self.max_results_age = 3600  # 1 hour in seconds
         self.results_cache: Dict[int, Dict[str, Any]] = {}
+        self._scheduler_task = None
         logger.info("SchedulerService initialized")
 
     async def initialize(self):
@@ -93,25 +94,55 @@ class SchedulerService:
 
     async def start(self):
         """Start the scheduler service."""
+        if self.running:
+            logger.warning("SchedulerService is already running")
+            return
+            
         logger.info("Starting SchedulerService")
         self.running = True
         
+        # Create the scheduler task
+        self._scheduler_task = asyncio.create_task(self._scheduler_loop())
+        logger.info("Scheduler task created")
+        
+        # Execute initial templates
+        try:
+            templates_to_execute = []
+            current_time = datetime.now()
+            
+            for template in self.templates:
+                if template.refresh_rate <= 0:
+                    continue
+                    
+                cached_result = self.results_cache.get(template.id)
+                if not cached_result or \
+                   (current_time - cached_result["timestamp"]).total_seconds() >= template.refresh_rate:
+                    templates_to_execute.append(template)
+            
+            if templates_to_execute:
+                logger.info(f"Executing {len(templates_to_execute)} templates")
+                await self._execute_templates(templates_to_execute)
+        except Exception as e:
+            logger.error(f"Error in initial template execution: {str(e)}")
+            logger.exception("Full traceback:")
+
+    async def _scheduler_loop(self):
+        """Main scheduler loop."""
+        logger.info("Scheduler loop started")
         while self.running:
             try:
-                # Load templates if not already loadedJ
+                # Load templates if not already loaded
                 if not self.templates:
                     await self.load_templates()
                 
-                # Execute templates immediately
+                # Execute templates
                 templates_to_execute = []
                 current_time = datetime.now()
                 
                 for template in self.templates:
-                    # Skip templates with refresh_rate <= 0
                     if template.refresh_rate <= 0:
                         continue
                         
-                    # Check if template needs execution
                     cached_result = self.results_cache.get(template.id)
                     if not cached_result or \
                        (current_time - cached_result["timestamp"]).total_seconds() >= template.refresh_rate:
@@ -124,6 +155,9 @@ class SchedulerService:
                 # Wait for the next interval
                 await asyncio.sleep(self.interval)
                 
+            except asyncio.CancelledError:
+                logger.info("Scheduler loop cancelled")
+                break
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {str(e)}")
                 logger.exception("Full traceback:")
@@ -133,7 +167,8 @@ class SchedulerService:
         """Stop the scheduler."""
         logger.info("Stopping scheduler...")
         self.running = False
-        if hasattr(self, '_scheduler_task'):
+        
+        if self._scheduler_task:
             try:
                 self._scheduler_task.cancel()
                 await self._scheduler_task
@@ -149,20 +184,6 @@ class SchedulerService:
             logger.error(f"Error cleaning up Text2SQL service: {str(e)}")
         
         logger.info("Scheduler stopped")
-
-    async def _scheduler_loop(self):
-        """Main scheduler loop."""
-        logger.info("Scheduler loop started")
-        while self.running:
-            try:
-                logger.info("Starting scheduler cycle")
-                await self._execute_templates(list(self.results.values()))
-                await self._cleanup_old_results()
-                logger.info(f"Scheduler cycle complete, sleeping for {self.interval} seconds")
-                await asyncio.sleep(self.interval)
-            except Exception as e:
-                logger.error(f"Error in scheduler loop: {str(e)}")
-                await asyncio.sleep(5)  # Wait before retrying
 
     async def execute_template(self, template_row) -> ExecutionResult:
         """Execute a single template and return the result."""
