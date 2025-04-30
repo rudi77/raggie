@@ -149,9 +149,34 @@ export const LiveTileGrid: React.FC = () => {
   }
 
   return (
-    <Grid container spacing={2} sx={{ p: 2 }}>
+    <Grid 
+      container 
+      spacing={3} 
+      sx={{ 
+        p: 3,
+        width: '100%',
+        margin: 0, // Remove default margin
+        '& .MuiGrid-item': {
+          paddingTop: 3, // Consistent padding
+          paddingLeft: 3 // Consistent padding
+        }
+      }}
+    >
       {Array.from(tiles.values()).map(({ template, data, error, lastUpdate }) => (
-        <Grid item xs={12} sm={6} md={4} lg={3} key={template.id}>
+        <Grid 
+          item 
+          xs={12} 
+          sm={6} 
+          md={4} 
+          lg={3} 
+          key={template.id}
+          sx={{
+            display: 'flex', // Enable flex layout
+            '& > *': { // Target the LiveTile component
+              width: '100%' // Ensure the tile takes full width
+            }
+          }}
+        >
           <LiveTile
             template={template}
             data={data}

@@ -62,8 +62,30 @@ export const LiveTile: React.FC<LiveTileProps> = ({
   };
 
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card sx={{ 
+      height: '400px', // Fixed height for all tiles
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden' // Prevent content from expanding the card
+    }}>
       <CardHeader
+        sx={{
+          p: 2, // Consistent padding
+          '& .MuiCardHeader-content': {
+            overflow: 'hidden' // Prevent title from expanding
+          },
+          '& .MuiCardHeader-title': {
+            fontSize: '1rem',
+            fontWeight: 500,
+            lineHeight: 1.2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            height: '2.4em' // Fixed height for 2 lines
+          }
+        }}
         title={template.source_question}
         action={
           <Tooltip title="Refresh data">
@@ -78,7 +100,13 @@ export const LiveTile: React.FC<LiveTileProps> = ({
           </Typography>
         }
       />
-      <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
+      <CardContent sx={{ 
+        flexGrow: 1, 
+        position: 'relative',
+        height: 'calc(100% - 85px)', // Subtract header height
+        overflow: 'auto', // Make content scrollable if it overflows
+        p: 2 // Consistent padding
+      }}>
         {error ? (
           <Alert severity="error" sx={{ mt: 1 }}>
             {error}
@@ -88,12 +116,18 @@ export const LiveTile: React.FC<LiveTileProps> = ({
             display="flex"
             justifyContent="center"
             alignItems="center"
-            minHeight="200px"
+            height="100%"
           >
             <CircularProgress />
           </Box>
         ) : (
-          <Box sx={{ height: '100%' }}>
+          <Box sx={{ 
+            height: '100%',
+            '& > *': { // Apply to all widget components
+              height: '100%',
+              width: '100%'
+            }
+          }}>
             {getWidgetComponent(template.widget_type, data)}
           </Box>
         )}
