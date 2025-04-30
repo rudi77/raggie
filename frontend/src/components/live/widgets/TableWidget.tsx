@@ -48,12 +48,13 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
           width: '100%',
           backgroundColor: theme.palette.background.paper,
           overflow: 'auto',
-          borderRadius: theme.shape.borderRadius,
-          boxShadow: theme.shadows[2],
+          borderRadius: '2px',
+          boxShadow: 'none',
+          border: `1px solid ${theme.palette.divider}`,
           '& .MuiTableCell-root': {
             borderColor: theme.palette.divider,
             whiteSpace: 'nowrap', // Prevent text wrapping
-            padding: '8px 16px', // Consistent padding
+            padding: '6px 12px', // Reduced padding
             color: theme.palette.text.primary,
             '&:first-of-type': {
               position: 'sticky',
@@ -81,7 +82,7 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
             background: theme.palette.mode === 'dark'
               ? theme.palette.grey[600]
               : theme.palette.grey[400],
-            borderRadius: '4px',
+            borderRadius: '2px',
             '&:hover': {
               background: theme.palette.mode === 'dark'
                 ? theme.palette.grey[500]
@@ -98,17 +99,21 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
                   key={column}
                   sx={{
                     backgroundColor: theme.palette.mode === 'dark'
-                      ? theme.palette.grey[900]
-                      : theme.palette.grey[100],
+                      ? alpha(theme.palette.primary.main, 0.2)
+                      : alpha(theme.palette.primary.main, 0.1),
                     color: theme.palette.text.primary,
                     fontWeight: 600,
                     width: columnWidth,
                     minWidth: columnWidth,
                     maxWidth: columnWidth,
+                    fontSize: '0.875rem',
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    borderBottom: `2px solid ${theme.palette.divider}`,
                     '&:first-of-type': {
                       backgroundColor: theme.palette.mode === 'dark'
-                        ? theme.palette.grey[900]
-                        : theme.palette.grey[100],
+                        ? alpha(theme.palette.primary.main, 0.2)
+                        : alpha(theme.palette.primary.main, 0.1),
                       zIndex: 3 // Above sticky column cells
                     }
                   }}

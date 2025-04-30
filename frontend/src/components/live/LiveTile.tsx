@@ -19,6 +19,7 @@ import { BarChartWidget } from './widgets/BarChartWidget';
 import { PieChartWidget } from './widgets/PieChartWidget';
 import { NumberWidget } from './widgets/NumberWidget';
 import { TextWidget } from './widgets/TextWidget';
+import { useTheme } from '@mui/material/styles';
 
 interface LiveTileProps {
   template: SQLTemplate;
@@ -61,6 +62,8 @@ export const LiveTile: React.FC<LiveTileProps> = ({
     console.log('Manual refresh requested for template:', template.id);
   };
 
+  const theme = useTheme();
+
   return (
     <Card sx={{ 
       height: '400px', // Fixed height for all tiles
@@ -68,11 +71,16 @@ export const LiveTile: React.FC<LiveTileProps> = ({
       display: 'flex', 
       flexDirection: 'column',
       overflow: 'hidden', // Prevent content from expanding the card
-      minWidth: '500px' // Minimum width based on LineChart
+      minWidth: '500px', // Minimum width based on LineChart
+      borderRadius: '2px', // Reduce outer border radius
+      '& .MuiPaper-root': {
+        borderRadius: '2px', // Consistent border radius for inner elements
+      }
     }}>
       <CardHeader
         sx={{
-          p: 2, // Consistent padding
+          p: 1.5, // Reduced padding
+          borderBottom: `1px solid ${theme.palette.divider}`,
           '& .MuiCardHeader-content': {
             overflow: 'hidden', // Prevent title from expanding
             minWidth: 0 // Allow text to truncate
@@ -107,8 +115,11 @@ export const LiveTile: React.FC<LiveTileProps> = ({
         flexGrow: 1, 
         position: 'relative',
         height: 'calc(100% - 85px)', // Subtract header height
-        p: 2, // Consistent padding
-        overflow: 'hidden' // Hide overflow at container level
+        p: 1, // Reduced padding
+        overflow: 'hidden', // Hide overflow at container level
+        '&:last-child': {
+          pb: 1 // Override default padding bottom
+        }
       }}>
         {error ? (
           <Alert severity="error" sx={{ mt: 1 }}>
@@ -139,13 +150,19 @@ export const LiveTile: React.FC<LiveTileProps> = ({
               height: '8px'
             },
             '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1'
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[800]
+                : theme.palette.grey[200]
             },
             '&::-webkit-scrollbar-thumb': {
-              background: '#888',
-              borderRadius: '4px',
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[600]
+                : theme.palette.grey[400],
+              borderRadius: '2px',
               '&:hover': {
-                background: '#666'
+                background: theme.palette.mode === 'dark'
+                  ? theme.palette.grey[500]
+                  : theme.palette.grey[500]
               }
             }
           }}>

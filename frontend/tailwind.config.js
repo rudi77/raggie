@@ -8,27 +8,37 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Dark theme colors (default)
+        // Dark theme colors (navy blue theme)
         dark: {
-          primary: '#4285f4',
-          accent: '#4285f4',
-          background: '#1a1f2e',
-          'background-light': '#1e2538',
-          'background-lighter': '#2a2f3e',
-          text: '#ffffff',
-          'text-secondary': '#808080',
-          border: '#2a2f3e',
+          primary: '#3B82F6', // Bright blue for primary elements
+          accent: '#3B82F6',
+          background: '#0F172A', // Deep navy blue
+          'background-light': '#1E293B', // Lighter navy blue
+          'background-lighter': '#334155', // Even lighter navy blue for hover states
+          text: '#F8FAFC', // Almost white text
+          'text-secondary': '#94A3B8', // Muted text
+          border: '#1E293B', // Same as background-light for subtle borders
+          chart: {
+            background: '#1E293B',
+            grid: '#334155',
+            text: '#94A3B8'
+          }
         },
-        // Light Grey theme colors
+        // Light theme colors
         light: {
-          primary: '#4285f4',
-          accent: '#4285f4',
-          background: '#e0e0e0',
-          'background-light': '#ffffff',
-          'background-lighter': '#e8e8e8',
-          text: '#2c3e50',
-          'text-secondary': '#718096',
-          border: '#e2e8f0',
+          primary: '#3B82F6',
+          accent: '#3B82F6',
+          background: '#F1F5F9',
+          'background-light': '#FFFFFF',
+          'background-lighter': '#F8FAFC',
+          text: '#0F172A',
+          'text-secondary': '#64748B',
+          border: '#E2E8F0',
+          chart: {
+            background: '#FFFFFF',
+            grid: '#E2E8F0',
+            text: '#64748B'
+          }
         }
       },
       height: {
