@@ -64,15 +64,18 @@ export const LiveTile: React.FC<LiveTileProps> = ({
   return (
     <Card sx={{ 
       height: '400px', // Fixed height for all tiles
+      width: '100%', // Take full width of grid item
       display: 'flex', 
       flexDirection: 'column',
-      overflow: 'hidden' // Prevent content from expanding the card
+      overflow: 'hidden', // Prevent content from expanding the card
+      minWidth: '500px' // Minimum width based on LineChart
     }}>
       <CardHeader
         sx={{
           p: 2, // Consistent padding
           '& .MuiCardHeader-content': {
-            overflow: 'hidden' // Prevent title from expanding
+            overflow: 'hidden', // Prevent title from expanding
+            minWidth: 0 // Allow text to truncate
           },
           '& .MuiCardHeader-title': {
             fontSize: '1rem',
@@ -104,8 +107,8 @@ export const LiveTile: React.FC<LiveTileProps> = ({
         flexGrow: 1, 
         position: 'relative',
         height: 'calc(100% - 85px)', // Subtract header height
-        overflow: 'auto', // Make content scrollable if it overflows
-        p: 2 // Consistent padding
+        p: 2, // Consistent padding
+        overflow: 'hidden' // Hide overflow at container level
       }}>
         {error ? (
           <Alert severity="error" sx={{ mt: 1 }}>
@@ -123,9 +126,27 @@ export const LiveTile: React.FC<LiveTileProps> = ({
         ) : (
           <Box sx={{ 
             height: '100%',
+            width: '100%',
+            overflow: 'auto', // Enable both scrollbars
             '& > *': { // Apply to all widget components
               height: '100%',
-              width: '100%'
+              width: '100%',
+              minWidth: '500px', // Consistent minimum width for all widgets
+            },
+            // Custom scrollbar styling
+            '&::-webkit-scrollbar': {
+              width: '8px',
+              height: '8px'
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#888',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#666'
+              }
             }
           }}>
             {getWidgetComponent(template.widget_type, data)}

@@ -56,7 +56,14 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
 
   if (!data || data.length === 0) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+      <Box 
+        display="flex" 
+        justifyContent="center" 
+        alignItems="center" 
+        height="100%"
+        width="100%"
+        minWidth="500px"
+      >
         <Typography color="textSecondary">
           No data available
         </Typography>
@@ -67,23 +74,37 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
   const keys = Object.keys(data[0]).slice(1);
 
   return (
-    <Box sx={{ width: '100%', height: '100%', minHeight: 300 }}>
-      <ResponsiveContainer>
+    <Box sx={{ 
+      width: '100%', 
+      height: '100%', 
+      minWidth: '500px',
+      '& .recharts-responsive-container': {
+        minWidth: '500px !important',
+        width: '100% !important'
+      }
+    }}>
+      <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={chartData}
           margin={{
             top: 5,
             right: 30,
             left: 20,
-            bottom: 5,
+            bottom: 25, // Increased to accommodate x-axis labels
           }}
         >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey={Object.keys(data[0])[0]}
             tick={{ fill: theme.palette.text.primary }}
+            angle={-45}
+            textAnchor="end"
+            height={60}
           />
-          <YAxis tick={{ fill: theme.palette.text.primary }} />
+          <YAxis 
+            tick={{ fill: theme.palette.text.primary }}
+            width={60}
+          />
           <Tooltip
             contentStyle={{
               backgroundColor: theme.palette.background.paper,
@@ -92,7 +113,7 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
             }}
             labelStyle={{ color: theme.palette.text.primary }}
           />
-          <Legend />
+          <Legend wrapperStyle={{ paddingTop: '10px' }}/>
           {keys.map((key, index) => (
             <Line
               key={key}

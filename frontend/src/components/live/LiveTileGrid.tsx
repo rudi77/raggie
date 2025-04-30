@@ -158,7 +158,10 @@ export const LiveTileGrid: React.FC = () => {
         margin: 0, // Remove default margin
         '& .MuiGrid-item': {
           paddingTop: 3, // Consistent padding
-          paddingLeft: 3 // Consistent padding
+          paddingLeft: 3, // Consistent padding
+          minWidth: '500px', // Minimum width for grid items
+          flex: '1 1 500px', // Flex grow/shrink with minimum width
+          maxWidth: 'calc(100% - 24px)' // Prevent overflow
         }
       }}
     >
@@ -173,7 +176,8 @@ export const LiveTileGrid: React.FC = () => {
           sx={{
             display: 'flex', // Enable flex layout
             '& > *': { // Target the LiveTile component
-              width: '100%' // Ensure the tile takes full width
+              width: '100%', // Ensure the tile takes full width
+              minWidth: '500px' // Consistent minimum width
             }
           }}
         >
