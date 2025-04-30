@@ -30,6 +30,9 @@ Taskliste (mit Aufteilung Frontend/Backend)
     [x] Grid-Layout mit responsivem Design
     [x] Automatische Anordnung der Tiles
     [x] Loading States für Tiles
+    [x] Vollbildnutzung mit CSS Grid
+    [x] Optimierte Tile-Verteilung
+    [x] Konsistente Mindestbreite (500px)
 
  [x] LiveTile Komponente:
     [x] Titel aus source_question
@@ -38,6 +41,8 @@ Taskliste (mit Aufteilung Frontend/Backend)
     [x] Refresh-Indikator
     [x] Aktualisierungszeitpunkt
     [x] Optionaler Reload-Button
+    [x] Responsives Layout
+    [x] Einheitliche Höhe (400px)
 
  [x] Widget Komponenten:
     [x] Tabellen-Widget
@@ -76,10 +81,14 @@ Taskliste (mit Aufteilung Frontend/Backend)
  [ ] Fehlerbehandlung & Retry-Mechanismen
     [ ] Automatischer Reconnect bei Verbindungsverlust
     [ ] Retry bei fehlgeschlagenen Queries
- [ ] Performance Optimierungen
+ [x] Performance Optimierungen
+    [x] CSS Grid für optimale Verteilung
+    [x] Konsistente Tile-Größen
     [ ] Virtualisierte Liste für viele Tiles
     [ ] Lazy Loading für Widget-Komponenten
  [ ] Benutzerfreundlichkeit
     [ ] Drag & Drop für Tile-Anordnung
     [ ] Größenänderung der Tiles
     [ ] Filter & Suche für Templates
+    [x] Vollbildnutzung
+    [x] Responsives Layout
