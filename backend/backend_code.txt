@@ -1,4 +1,38 @@
 
+// Relative Path: api\routes\query.py
+
+# backend/api/routes/query.py
+
+from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional, Any
+from pydantic import BaseModel
+from smolagents import CodeAgent
+from ..dependencies import get_manager_agent
+
+router = APIRouter(tags=["query"])
+
+class QueryRequest(BaseModel):
+    question: str
+
+class QueryResponse(BaseModel):
+    sql: str
+    result: Any
+
+@router.post('/query', response_model=QueryResponse)
+async def execute_query(
+    request: QueryRequest,
+    manager_agent: CodeAgent = Depends(get_manager_agent)
+):
+    try:
+        result = await manager_agent.run(request.question)
+        return QueryResponse(sql=result["sql"], result=result["result"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
 // Relative Path: api\routes\text2sql.py
 
 # backend/api/routes/text2sql.py
@@ -64,15 +98,35 @@ async def explain_query(
 
 # backend/api/dependencies.py
 
+from smolagents import LiteLLMModel, CodeAgent
 from fastapi import Depends
 from ..services.text2sql_service import Text2SQLService
 from ..core.config import get_settings, Settings
+from ..agents import create_manager_agent, create_text2sql_agent
 
 def get_text2sql_service(settings: Settings = Depends(get_settings)) -> Text2SQLService:
     return Text2SQLService(
         db_path=settings.database_path,
         openai_api_key=settings.openai_api_key
     )
+
+def get_manager_agent(settings: Settings = Depends(get_settings)) -> CodeAgent:
+
+    model = LiteLLMModel(
+        model_id=settings.openai_model,
+        api_key=settings.openai_api_key,
+        api_base=settings.openai_api_base
+    )
+
+    text2sql_agent = create_text2sql_agent(
+        model=model,
+        db_path=settings.database_path,
+        api_key=settings.openai_api_key
+    )
+    
+    # agent = create_manager_agent(model, [text2sql_agent])
+    # return agent
+    return text2sql_agent
 
 
 
@@ -139,11 +193,14 @@ async def get_available_tables():
 # backend/core/config.py
 
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 
 class Settings(BaseSettings):
-    database_path: str = "path/to/your/database.db"
-    openai_api_key: str
+    database_path: str   = "D:/home/Source/Repos/raggie/db/finance_test.db"
+    openai_api_key: str  = Field(..., env='OPENAI_API_KEY')
+    openai_model: str    = Field('gpt-4o', env='OPENAI_MODEL')
+    openai_api_base: str = Field('https://api.openai.com/v1', env='OPENAI_API_BASE')
 
     class Config:
         env_file = ".env"
@@ -324,6 +381,55 @@ def test_execute_invalid_query():
 
 
 
+// Relative Path: agents.py
+
+from typing import Dict, Any, List
+from smolagents import (
+    CodeAgent,
+    LiteLLMModel,
+    ToolCallingAgent
+)
+
+from .tools import Text2SQLTool
+def create_manager_agent(model: LiteLLMModel, managed_agents: List[ToolCallingAgent]) -> CodeAgent:
+    return CodeAgent(
+        tools=[],
+        model=model,
+        managed_agents=managed_agents,
+        planning_interval=2
+    )
+
+def create_text2sql_agent(model: LiteLLMModel, db_path: str, api_key: str) -> ToolCallingAgent:
+    text2sql_agent = ToolCallingAgent(
+        model=model,
+        tools=[Text2SQLTool(db_path=db_path, openai_api_key=api_key)],
+        name="Text2SQLAgent",
+        description="This agent converts natural language questions into SQL queries and executes them on a database.",
+        planning_interval=0,        
+    )
+
+    text2sql_agent.prompt_templates["system_prompt"] = """
+    You are a helpful assistant that converts natural language questions into SQL queries and executes them on a database.
+    Therefore you have a single tool to use: Text2SQLTool.
+
+    Do not use any other tools.
+    Do not plan, just use the tool.
+
+    Return the result as a JSON string and nothing else.
+    """
+
+    text2sql_agent.prompt_templates["planning"] = "Do not plan, just use the tool."
+    text2sql_agent.prompt_templates["task"] = "{{question}}"
+
+    print(text2sql_agent.prompt_templates)
+
+    return text2sql_agent
+
+
+
+
+
+
 // Relative Path: main.py
 
 from fastapi import FastAPI
@@ -331,7 +437,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-from .api.routes import text2sql
+from .api.routes import text2sql, query
 
 app = FastAPI(
     title="cxo API",
@@ -342,7 +448,7 @@ app = FastAPI(
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -350,9 +456,85 @@ app.add_middleware(
 
 # Include Text2SQL routes
 app.include_router(text2sql.router)
+app.include_router(query.router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+
+
+
+// Relative Path: tools.py
+
+# agents/tools.py
+
+from smolagents import Tool
+import json
+from text2sql.agent.sql_agent import SQLAgent
+from llama_index.llms.openai import OpenAI
+
+class Text2SQLTool(Tool):
+    description = """
+    A tool that converts natural language questions into SQL queries, executes them on a database and returns the result as a JSON string.
+    Just provide the question, the tool will return the result as a JSON string.
+    """
+    name = "Text2SQLTool"
+    inputs = {
+        "question" : {
+            "type" : "string",
+            "description" : "The question to convert to a SQL query"
+        }
+    }
+    output_type = "string"
+
+    def __init__(self, db_path: str, openai_api_key: str):
+        """Initialize Text2SQL service with configuration."""
+        # Initialize OpenAI LLM with API key
+        self.llm = OpenAI(api_key=openai_api_key, model="gpt-4o-mini")
+        
+        # Initialize the SQL agent with our database and LLM
+        self.agent = SQLAgent(database_url=f"sqlite:///{db_path}", llm=self.llm)
+
+        self.is_initialized = True
+
+    async def forward(self, question: str) -> str:
+        """Execute a natural language query."""
+        try:
+            # Use the agent's query method which returns a dictionary with sql_query, result, and answer
+            result = await self.agent.query(question)
+            
+            print("\nQuestion:", question)
+            print("\nSQL Query:", result["sql_query"])
+            print("\nAnswer:", result["answer"])
+            print("\nRaw Result:", result["result"])
+            
+            # Format the result as JSON string
+            formatted_result = json.dumps(result["result"], default=str)
+            
+            response = {
+                "sql": result["sql_query"],
+                "result": result["result"],
+                "answer": result["answer"],
+                "formatted_result": formatted_result
+            }
+            
+            return json.dumps(response)
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL query: {str(e)}")
+            raise
+
+    async def explain(self, question: str) -> str:
+        """Get SQL explanation for a question without executing it."""
+        # For now, we'll just return the SQL query without executing it
+        try:
+            # Use the agent's query method but only return the SQL part
+            result = await self.agent.query(question)
+            return result["sql_query"]
+        except Exception as e:
+            # Log the error and re-raise
+            print(f"Error in Text2SQL explain: {str(e)}")
+            raise
+
 
 
 
