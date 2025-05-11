@@ -28,6 +28,9 @@ class ChromaStore(BaseVectorStore):
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection("rag_documents")
+        
+        # Set embedding dimension (default for OpenAI embeddings)
+        self.embedding_dimension = 1536
     
     def store(self, vectors: List[List[float]], ids: List[str], metadatas: List[Dict[str, Any]] = None) -> None:
         """Store vectors in ChromaDB."""
@@ -128,4 +131,44 @@ class ChromaStore(BaseVectorStore):
 
     def clear(self) -> None:
         """Clear all vectors from the collection."""
-        self.collection.delete() 
+        self.collection.delete()
+
+    def search_by_source(self, source: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Search for chunks from a specific source document.
+        
+        Args:
+            source: Name of the document to search for (can be partial path)
+            top_k: Number of results to return. If None, returns all chunks.
+            
+        Returns:
+            List of dictionaries containing chunk content and metadata
+        """
+        try:
+            # Create a filter for the source using contains operator
+            where = {
+                "source": {
+                    "$in": source
+                }
+            }
+            
+            # Query the collection using metadata filtering
+            results = self.collection.get(
+                where=where,
+                limit=top_k if top_k is not None else None,
+                include=["metadatas", "documents"]
+            )
+            
+            # Format results
+            formatted_results = []
+            if results["documents"] and len(results["documents"]) > 0:
+                for i in range(len(results["documents"])):
+                    formatted_results.append({
+                        "content": results["documents"][i],
+                        "metadata": results["metadatas"][i]
+                    })
+            
+            return formatted_results
+            
+        except Exception as e:
+            print(f"Error searching by source: {e}")
+            return [] 

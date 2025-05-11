@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Optional, Union
 import uuid
@@ -12,6 +13,8 @@ from langchain.schema import Document as LangchainDocument
 
 from rag.core.models import Document as RagDocument, Chunk
 from rag.chunking import ChunkerFactory
+from rag.llm.vision_model import create_vision_model
+from .advanced_pdf_loader import AdvancedPDFLoader
 
 class DocumentLoader:
     """Handles loading and processing of various document types."""
@@ -48,7 +51,19 @@ class DocumentLoader:
         """Get the appropriate loader for the file type."""
         suffix = file_path.suffix.lower()
         if suffix == ".pdf":
-            return PyPDFLoader(str(file_path))
+            # return PyPDFLoader(str(file_path))
+            vision_model = create_vision_model(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model_name="gpt-4.1-nano",
+                max_tokens=300,
+            )
+
+            return AdvancedPDFLoader(
+                file_path=file_path,
+                vision_model=vision_model,
+                include_images=True,
+                include_tables=True
+            )
         elif suffix == ".txt":
             return TextLoader(str(file_path))
         elif suffix == ".md":

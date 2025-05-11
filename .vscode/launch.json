@@ -18,6 +18,7 @@
             "type": "python",
             "request": "launch",
             "module": "rag.cli.main",
+            
             "args": ["ingest", "${input:documentPath}"],
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -31,6 +32,18 @@
             "request": "launch",
             "module": "rag.cli.main",
             "args": ["query", "${input:queryText}"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "RAG CLI Chunks",
+            "type": "python",
+            "request": "launch",
+            "module": "rag.cli.main",
+            "args": ["chunks", "${input:documentName}", "--top-k", "${input:topK}"],
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
@@ -67,6 +80,17 @@
             "id": "queryText",
             "type": "promptString",
             "description": "Query text to search for"
+        },
+        {
+            "id": "documentName",
+            "type": "promptString",
+            "description": "Name of the document to show chunks for"
+        },
+        {
+            "id": "topK",
+            "type": "promptString",
+            "description": "Number of chunks to show (leave empty for all chunks)",
+            "default": ""
         }
     ]
 } 

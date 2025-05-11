@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from typing import Optional, List
+import uuid
 
 import typer
 from rich.console import Console
@@ -46,13 +47,18 @@ def ingest(
             task = progress.add_task("Loading documents...", total=None)
             documents = document_loader.load_documents(path)
             progress.update(task, completed=True)
+            console.print(f"[blue]Found {len(documents)} documents to process[/blue]")
 
             task = progress.add_task("Chunking documents...", total=len(documents))
             chunks = []
-            for doc in documents:
+            for i, doc in enumerate(documents, 1):
                 doc_chunks = document_loader.chunk_document(doc, chunk_size, chunk_overlap)
                 chunks.extend(doc_chunks)
+                console.print(f"[blue]Document {i}/{len(documents)}: Created {len(doc_chunks)} chunks[/blue]")
                 progress.advance(task)
+
+            console.print(f"[blue]Total chunks created: {len(chunks)}[/blue]")
+            console.print(f"[blue]Average chunks per document: {len(chunks)/len(documents):.1f}[/blue]")
 
             task = progress.add_task("Generating embeddings...", total=len(chunks))
             vectors = []
@@ -63,11 +69,18 @@ def ingest(
 
             task = progress.add_task("Storing vectors...", total=len(chunks))
             for chunk, vector in zip(chunks, vectors):
-                doc_id = f"{chunk.metadata.get('source', 'unknown')}_{len(vectors)}"
-                store.store_vector(doc_id, vector, chunk.page_content, chunk.metadata)
+                doc_id = str(uuid.uuid4())
+                store.store_vector(
+                    id=doc_id,
+                    vector=vector,
+                    content=chunk.page_content,
+                    metadata=chunk.metadata)
+                
                 progress.advance(task)
 
         console.print(f"[green]Successfully ingested {len(documents)} documents![/green]")
+        console.print(f"[green]Total chunks processed: {len(chunks)}[/green]")
+        console.print(f"[green]Average chunk size: {sum(len(c.page_content) for c in chunks)/len(chunks):.0f} characters[/green]")
     except Exception as e:
         console.print(f"[red]Error during ingestion: {str(e)}[/red]")
         raise typer.Exit(1)
@@ -141,6 +154,42 @@ def clear(
         raise typer.Exit(1)
     finally:
         store.close()
+
+@app.command()
+def chunks(
+    document_name: str = typer.Argument(..., help="Name of the document to show chunks for"),
+    top_k: Optional[int] = typer.Option(None, "--top-k", "-k", help="Number of chunks to show (default: all chunks)")
+):
+    """Show chunks for a specific document."""
+    try:
+        # Initialize components
+        store = ChromaStore()
+        
+        # Search for chunks from the specified document
+        results = store.search_by_source(document_name, top_k=top_k)
+        
+        if not results:
+            console.print(f"[yellow]No chunks found for document: {document_name}[/yellow]")
+            return
+        
+        # Display chunks
+        console.print(f"\n[bold]Chunks for document: {document_name}[/bold]")
+        console.print(f"Found {len(results)} chunks\n")
+        
+        for i, result in enumerate(results, 1):
+            # Create a panel for each chunk
+            chunk_panel = Panel(
+                f"[bold]Chunk {i}[/bold]\n\n{result['content']}\n\n"
+                f"[dim]Page: {result['metadata'].get('page_number', 'N/A')}[/dim]",
+                title=f"Chunk {i}",
+                border_style="blue"
+            )
+            console.print(chunk_panel)
+            console.print()  # Add spacing between chunks
+            
+    except Exception as e:
+        console.print(f"[red]Error retrieving chunks: {str(e)}[/red]")
+        raise typer.Exit(1)
 
 if __name__ == "__main__":
     app() 
