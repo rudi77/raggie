@@ -1,0 +1,49 @@
+@startuml
+!define C4P https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master
+!includeurl C4P/C4_Context.puml
+!includeurl C4P/C4_Container.puml
+!includeurl C4P/C4_Component.puml
+
+'-----------
+' System Context
+'-----------
+Person(user, "End User", "Uses the CLI to query and ingest documents")
+System(ragSystem, "RAG System", "Retrieval-Augmented Generation system combining vector search with LLM responses.")
+System_Ext(openai, "OpenAI API", "Provides embeddings and LLM capabilities.")
+System_Ext(azureOCR, "Azure Document Intelligence", "Performs OCR on scanned documents.")
+System_Ext(chromaDB, "ChromaDB", "Vector database for storing embeddings.")
+
+Rel(user, ragSystem, "Uses via CLI commands (ingest, query, clear, chunks)")
+Rel(ragSystem, openai, "Requests embeddings & LLM responses via API")
+Rel(ragSystem, azureOCR, "Sends documents for OCR processing")
+Rel(ragSystem, chromaDB, "Stores and retrieves vector embeddings")
+
+'-----------
+' Container Diagram
+'-----------
+Container(ragCli, "CLI (Typer)", "Python/Typer", "Exposes commands for ingesting, querying, and managing documents.")
+Container(docLoader, "Document Loader", "Python module", "Loads and parses input files (PDF, Markdown, text).")
+Container(advancedPdf, "Advanced PDF Loader", "Python module", "Extracts text, tables, images with optional Vision model.")
+Container(ocrProc, "Azure OCR Processor", "Python module", "Extracts text using Azure Document Intelligence.")
+Container(chunkService, "Chunker Factory & Chunkers", "Python module", "Splits documents into manageable chunks.")
+Container(embService, "Embedding Model", "Python module", "Generates vector embeddings via OpenAI or Sentence-Transformers.")
+Container(vectorStore, "ChromaStore", "ChromaDB", "Stores and retrieves embeddings and associated metadata.")
+Container(llmClient, "LLM Client", "Python module", "Generates answers by combining query context and LLM responses.")
+Container(visionModel, "Vision Model", "litellm / OpenAI Vision", "Describes images embedded in documents.")
+
+Rel(ragCli, docLoader, "Loads files via")
+Rel(ragCli, chunkService, "Chunks documents via")
+Rel(ragCli, embService, "Requests embeddings from")
+Rel(ragCli, vectorStore, "Stores/retrieves vectors with")
+Rel(ragCli, llmClient, "Requests answers from")
+
+Rel(docLoader, advancedPdf, "Uses for PDF files")
+Rel(docLoader, ocrProc, "Invokes for scanned PDF pages")
+Rel(advancedPdf, visionModel, "Optionally describes images using")
+Rel(chunkService, docLoader, "Receives documents to split")
+Rel(chunkService, docLoader, "Receives document metadata and content")
+Rel(embService, openai, "Calls OpenAI Embeddings API")
+Rel(llmClient, openai, "Calls OpenAI Chat API")
+Rel(vectorStore, chromaDB, "Persists and queries embeddings in")
+
+@enduml

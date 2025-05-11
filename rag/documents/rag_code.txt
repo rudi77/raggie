@@ -1,0 +1,2100 @@
+
+// Relative Path: chunking\chunker.py
+from typing import List, Dict, Any
+from ..core.interfaces import IChunker
+from ..core.models import Document, Chunk
+import uuid
+
+class BaseChunker(IChunker):
+    """Base class for chunking strategies."""
+    
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split a document into chunks."""
+        raise NotImplementedError("Subclasses must implement chunk()")
+    
+    def _create_chunk(self, content: str, document: Document, start_idx: int, end_idx: int) -> Chunk:
+        """Create a new chunk with metadata."""
+        return Chunk(
+            id=str(uuid.uuid4()),
+            document_id=document.id,
+            content=content,
+            metadata={
+                "start_index": start_idx,
+                "end_index": end_idx,
+                "chunk_size": len(content),
+                "document_source": document.source
+            }
+        ) 
+
+
+
+// Relative Path: chunking\chunker_factory.py
+from typing import Dict, Type, Optional
+from .chunker import BaseChunker
+from .token_chunker import TokenChunker
+from .recursive_character_chunker import RecursiveCharacterChunker
+from .markdown_chunker import MarkdownChunker
+from .html_chunker import HTMLChunker
+from .page_wise_chunker import PageWiseChunker
+
+class ChunkerFactory:
+    """Factory for creating chunkers based on document type."""
+    
+    # Registry of chunkers by name
+    _chunkers: Dict[str, Type[BaseChunker]] = {
+        "token": TokenChunker,
+        "recursive": RecursiveCharacterChunker,
+        "markdown": MarkdownChunker,
+        "html": HTMLChunker,
+        "page": PageWiseChunker
+    }
+    
+    @classmethod
+    def get_chunker(cls, chunker_type: str, **kwargs) -> BaseChunker:
+        """
+        Get a chunker instance based on the specified type.
+        
+        Args:
+            chunker_type: Type of chunker to create
+            **kwargs: Additional arguments to pass to the chunker constructor
+            
+        Returns:
+            An instance of the requested chunker
+            
+        Raises:
+            ValueError: If the chunker type is not supported
+        """
+        if chunker_type not in cls._chunkers:
+            raise ValueError(f"Unsupported chunker type: {chunker_type}. "
+                            f"Supported types: {', '.join(cls._chunkers.keys())}")
+        
+        chunker_class = cls._chunkers[chunker_type]
+        return chunker_class(**kwargs)
+    
+    @classmethod
+    def get_chunker_for_file(cls, file_path: str, **kwargs) -> BaseChunker:
+        """
+        Get an appropriate chunker based on the file extension.
+        
+        Args:
+            file_path: Path to the file
+            **kwargs: Additional arguments to pass to the chunker constructor
+            
+        Returns:
+            An instance of the appropriate chunker
+        """
+        # Extract file extension
+        extension = file_path.lower().split('.')[-1] if '.' in file_path else ''
+        
+        # Map extensions to chunker types
+        extension_map = {
+            'md': 'page',  # Use page-wise chunker for Markdown
+            'markdown': 'page',  # Use page-wise chunker for Markdown
+            'html': 'html',
+            'htm': 'html',
+            'pdf': 'page',  # Use page-wise chunker for PDFs
+            'txt': 'recursive',
+            'doc': 'recursive',
+            'docx': 'recursive'
+        }
+        
+        # Get the appropriate chunker type
+        chunker_type = extension_map.get(extension, 'recursive')
+        
+        # Set file-type specific configurations
+        if chunker_type == 'page':
+            if extension in ['md', 'markdown']:
+                # For Markdown, use a smaller min_page_size since sections tend to be smaller
+                kwargs.setdefault('min_page_size', 50)
+            else:  # PDF
+                # For PDFs, use a larger min_page_size since pages tend to be larger
+                kwargs.setdefault('min_page_size', 200)
+            
+            # Remove chunk_size and chunk_overlap for PageWiseChunker as it doesn't use them
+            kwargs.pop('chunk_size', None)
+            kwargs.pop('chunk_overlap', None)
+        
+        # Create and return the chunker
+        return cls.get_chunker(chunker_type, **kwargs)
+    
+    @classmethod
+    def register_chunker(cls, name: str, chunker_class: Type[BaseChunker]) -> None:
+        """
+        Register a new chunker type.
+        
+        Args:
+            name: Name of the chunker type
+            chunker_class: Class of the chunker
+        """
+        cls._chunkers[name] = chunker_class 
+
+
+
+// Relative Path: chunking\html_chunker.py
+from typing import List, Dict, Any, Optional
+from .chunker import BaseChunker
+from ..core.models import Document, Chunk
+import uuid
+from langchain.text_splitter import HTMLHeaderTextSplitter
+
+class HTMLChunker(BaseChunker):
+    """HTML-based chunking strategy using langchain's HTMLHeaderTextSplitter."""
+    
+    def __init__(self, headers_to_split_on: Optional[List[Dict[str, str]]] = None):
+        """
+        Initialize the chunker.
+        
+        Args:
+            headers_to_split_on: List of header configurations to split on.
+                Each config is a dict with 'level' and 'name' keys.
+                Example: [{"level": 1, "name": "h1"}, {"level": 2, "name": "h2"}]
+        """
+        super().__init__(chunk_size=0, chunk_overlap=0)  # Not used for this chunker
+        
+        # Default headers to split on if none provided
+        self.headers_to_split_on = headers_to_split_on or [
+            {"level": 1, "name": "h1"},
+            {"level": 2, "name": "h2"},
+            {"level": 3, "name": "h3"}
+        ]
+        
+        self.text_splitter = HTMLHeaderTextSplitter(
+            headers_to_split_on=self.headers_to_split_on
+        )
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split document into chunks based on HTML headers."""
+        # Use langchain's text splitter to get the chunks
+        html_docs = self.text_splitter.split_text(document.content)
+        
+        # Convert to our Chunk model
+        chunks = []
+        
+        for i, html_doc in enumerate(html_docs):
+            # Extract the content and metadata
+            content = html_doc.page_content
+            metadata = html_doc.metadata
+            
+            # Find the position of this chunk in the original text
+            # This is approximate since we don't have exact positions
+            chunk_start = document.content.find(content)
+            if chunk_start == -1:
+                # If we can't find the exact position, estimate it
+                chunk_start = i * 1000  # Rough estimate
+            
+            chunk_end = chunk_start + len(content)
+            
+            # Create our Chunk model
+            chunk = self._create_chunk(
+                content=content,
+                document=document,
+                start_idx=chunk_start,
+                end_idx=chunk_end
+            )
+            
+            # Add the HTML header metadata
+            chunk.metadata.update({
+                "chunk_index": i,
+                "html_headers": metadata
+            })
+            
+            chunks.append(chunk)
+        
+        return chunks 
+
+
+
+// Relative Path: chunking\markdown_chunker.py
+from typing import List, Dict, Any, Optional
+from .chunker import BaseChunker
+from ..core.models import Document, Chunk
+import uuid
+from langchain.text_splitter import MarkdownHeaderTextSplitter
+
+class MarkdownChunker(BaseChunker):
+    """Markdown-based chunking strategy using langchain's MarkdownHeaderTextSplitter."""
+    
+    def __init__(self, headers_to_split_on: Optional[List[Dict[str, str]]] = None):
+        """
+        Initialize the chunker.
+        
+        Args:
+            headers_to_split_on: List of header configurations to split on.
+                Each config is a dict with 'level' and 'name' keys.
+                Example: [{"level": 1, "name": "h1"}, {"level": 2, "name": "h2"}]
+        """
+        super().__init__(chunk_size=0, chunk_overlap=0)  # Not used for this chunker
+        
+        # Default headers to split on if none provided
+        self.headers_to_split_on = headers_to_split_on or [
+            {"level": 1, "name": "h1"},
+            {"level": 2, "name": "h2"},
+            {"level": 3, "name": "h3"}
+        ]
+        
+        self.text_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=self.headers_to_split_on
+        )
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split document into chunks based on markdown headers."""
+        # Use langchain's text splitter to get the chunks
+        markdown_docs = self.text_splitter.split_text(document.content)
+        
+        # Convert to our Chunk model
+        chunks = []
+        
+        for i, md_doc in enumerate(markdown_docs):
+            # Extract the content and metadata
+            content = md_doc.page_content
+            metadata = md_doc.metadata
+            
+            # Find the position of this chunk in the original text
+            # This is approximate since we don't have exact positions
+            chunk_start = document.content.find(content)
+            if chunk_start == -1:
+                # If we can't find the exact position, estimate it
+                chunk_start = i * 1000  # Rough estimate
+            
+            chunk_end = chunk_start + len(content)
+            
+            # Create our Chunk model
+            chunk = self._create_chunk(
+                content=content,
+                document=document,
+                start_idx=chunk_start,
+                end_idx=chunk_end
+            )
+            
+            # Add the markdown header metadata
+            chunk.metadata.update({
+                "chunk_index": i,
+                "markdown_headers": metadata
+            })
+            
+            chunks.append(chunk)
+        
+        return chunks 
+
+
+
+// Relative Path: chunking\page_wise_chunker.py
+from typing import List, Dict, Any
+from .chunker import BaseChunker
+from ..core.models import Document, Chunk
+import uuid
+
+class PageWiseChunker(BaseChunker):
+    """Page-based chunking strategy that splits documents at page boundaries."""
+    
+    def __init__(self, min_page_size: int = 100):
+        """
+        Initialize the chunker.
+        
+        Args:
+            min_page_size: Minimum size of a page to be considered valid.
+                          Pages smaller than this will be merged with the next page.
+        """
+        super().__init__(chunk_size=0, chunk_overlap=0)  # Not used for this chunker
+        self.min_page_size = min_page_size
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split document into chunks based on page boundaries."""
+        # Get page markers from document metadata if available
+        page_markers = document.metadata.get('page_markers', [])
+        if not page_markers:
+            # If no page markers, try to detect pages using common markers
+            content = document.content
+            # Common page break markers
+            markers = ['\f', '\n\n---\n\n', '\n\n***\n\n', '\n\nPage ', '\n\n[Page']
+            
+            current_pos = 0
+            for marker in markers:
+                while True:
+                    pos = content.find(marker, current_pos)
+                    if pos == -1:
+                        break
+                    page_markers.append(pos)
+                    current_pos = pos + len(marker)
+        
+        # Add start and end positions
+        page_markers = [0] + sorted(page_markers) + [len(document.content)]
+        
+        # Create chunks from pages
+        chunks = []
+        for i in range(len(page_markers) - 1):
+            start_idx = page_markers[i]
+            end_idx = page_markers[i + 1]
+            
+            # Extract page content
+            page_content = document.content[start_idx:end_idx].strip()
+            
+            # Skip empty pages or those below minimum size
+            if not page_content or len(page_content) < self.min_page_size:
+                continue
+            
+            # Create chunk for this page
+            chunk = self._create_chunk(
+                content=page_content,
+                document=document,
+                start_idx=start_idx,
+                end_idx=end_idx
+            )
+            
+            # Add page-specific metadata
+            chunk.metadata.update({
+                "chunk_type": "page",
+                "page_number": i + 1,
+                "page_markers": {
+                    "start": start_idx,
+                    "end": end_idx
+                }
+            })
+            
+            chunks.append(chunk)
+        
+        return chunks
+    
+    def _create_chunk(self, content: str, document: Document, start_idx: int, end_idx: int) -> Chunk:
+        """Create a chunk with the given content and metadata."""
+        return Chunk(
+            id=str(uuid.uuid4()),
+            content=content,
+            document_id=document.id,
+            metadata={
+                "start_index": start_idx,
+                "end_index": end_idx,
+                "source": document.source
+            }
+        ) 
+
+
+
+// Relative Path: chunking\recursive_character_chunker.py
+from typing import List, Dict, Any
+from .chunker import BaseChunker
+from ..core.models import Document, Chunk
+import uuid
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+class RecursiveCharacterChunker(BaseChunker):
+    """Recursive character-based chunking strategy using langchain's RecursiveCharacterTextSplitter."""
+    
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200, 
+                 separators: List[str] = None, keep_separator: bool = False):
+        """
+        Initialize the chunker.
+        
+        Args:
+            chunk_size: Maximum size of each chunk
+            chunk_overlap: Number of characters to overlap between chunks
+            separators: List of separators to use for splitting text
+            keep_separator: Whether to keep the separator in the chunk
+        """
+        super().__init__(chunk_size, chunk_overlap)
+        self.separators = separators or ["\n\n", "\n", " ", ""]
+        self.keep_separator = keep_separator
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=self.separators,
+            keep_separator=keep_separator
+        )
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split document into chunks using recursive character splitting."""
+        # Use langchain's text splitter to get the chunks
+        text_chunks = self.text_splitter.split_text(document.content)
+        
+        # Convert to our Chunk model
+        chunks = []
+        current_position = 0
+        
+        for i, text_chunk in enumerate(text_chunks):
+            # Find the position of this chunk in the original text
+            chunk_start = document.content.find(text_chunk, current_position)
+            if chunk_start == -1:
+                # If we can't find the exact position, estimate it
+                chunk_start = current_position
+            
+            chunk_end = chunk_start + len(text_chunk)
+            current_position = chunk_end
+            
+            # Create our Chunk model
+            chunk = self._create_chunk(
+                content=text_chunk,
+                document=document,
+                start_idx=chunk_start,
+                end_idx=chunk_end
+            )
+            
+            # Add additional metadata
+            chunk.metadata.update({
+                "chunk_index": i,
+                "separator_used": self._find_used_separator(text_chunk, document.content, chunk_start)
+            })
+            
+            chunks.append(chunk)
+        
+        return chunks
+    
+    def _find_used_separator(self, chunk: str, full_text: str, start_pos: int) -> str:
+        """Find which separator was used to create this chunk."""
+        # Look at the text before and after the chunk to determine the separator
+        if start_pos > 0:
+            before_text = full_text[max(0, start_pos - 10):start_pos]
+            for sep in self.separators:
+                if before_text.endswith(sep):
+                    return sep
+        
+        # If we couldn't find a separator before, look after
+        end_pos = start_pos + len(chunk)
+        if end_pos < len(full_text):
+            after_text = full_text[end_pos:min(end_pos + 10, len(full_text))]
+            for sep in self.separators:
+                if after_text.startswith(sep):
+                    return sep
+        
+        return "unknown" 
+
+
+
+// Relative Path: chunking\token_chunker.py
+from typing import List
+from .chunker import BaseChunker
+from ..core.models import Document, Chunk
+
+class TokenChunker(BaseChunker):
+    """Token-based chunking strategy."""
+    
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+        super().__init__(chunk_size, chunk_overlap)
+    
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split document into chunks based on token count."""
+        chunks = []
+        content = document.content
+        
+        # If content is empty, return empty list
+        if not content:
+            return chunks
+            
+        # If content is smaller than chunk size, return single chunk
+        if len(content) <= self.chunk_size:
+            return [Chunk(
+                id=f"{document.id}-0",
+                content=content,
+                document_id=document.id,
+                metadata=document.metadata
+            )]
+        
+        start_idx = 0
+        chunk_idx = 0
+        
+        while start_idx < len(content):
+            # Calculate end index for this chunk
+            end_idx = min(start_idx + self.chunk_size, len(content))
+            
+            # Find the last space before the end to avoid cutting words
+            if end_idx < len(content):
+                last_space = content.rfind(' ', start_idx, end_idx)
+                if last_space != -1:
+                    end_idx = last_space
+            
+            # Create chunk
+            chunk_content = content[start_idx:end_idx]
+            chunk = Chunk(
+                id=f"{document.id}-{chunk_idx}",
+                content=chunk_content,
+                document_id=document.id,
+                metadata=document.metadata
+            )
+            chunks.append(chunk)
+            
+            # Move start index for next chunk, considering overlap
+            start_idx = end_idx - self.chunk_overlap
+            if start_idx >= end_idx:
+                # If we're not advancing, force advancement by at least one character
+                start_idx = end_idx + 1
+            
+            chunk_idx += 1
+            
+            # Safety check to prevent infinite loops
+            if start_idx >= len(content):
+                break
+        
+        return chunks 
+
+
+
+// Relative Path: chunking\__init__.py
+"""
+Text chunking strategies and implementations.
+"""
+
+from .chunker import BaseChunker
+from .token_chunker import TokenChunker
+from .recursive_character_chunker import RecursiveCharacterChunker
+from .markdown_chunker import MarkdownChunker
+from .html_chunker import HTMLChunker
+from .page_wise_chunker import PageWiseChunker
+from .chunker_factory import ChunkerFactory
+
+__all__ = [
+    "BaseChunker",
+    "TokenChunker",
+    "RecursiveCharacterChunker",
+    "MarkdownChunker",
+    "HTMLChunker",
+    "PageWiseChunker",
+    "ChunkerFactory"
+] 
+
+
+
+// Relative Path: cli\main.py
+"""Main CLI module for the RAG system."""
+
+import os
+from pathlib import Path
+from typing import Optional, List
+import uuid
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.markdown import Markdown
+from langchain.schema import Document
+
+from rag.core.config import Settings
+from rag.ingestion.document_loader import DocumentLoader
+from rag.store.chroma_store import ChromaStore
+from rag.embedding.embeddings import EmbeddingModel
+from rag.llm.llm_client import LLMClient
+
+app = typer.Typer(help="RAG System CLI")
+console = Console()
+
+def get_settings() -> Settings:
+    """Get application settings."""
+    return Settings()
+
+@app.command()
+def ingest(
+    path: str = typer.Argument(..., help="Path to document or directory to ingest"),
+    chunk_size: int = typer.Option(1000, "--chunk-size", "-c", help="Size of text chunks"),
+    chunk_overlap: int = typer.Option(200, "--chunk-overlap", "-o", help="Overlap between chunks")
+):
+    """Ingest documents into the RAG system."""
+    try:
+        # Initialize components
+        store = ChromaStore()
+        embedding_model = EmbeddingModel()
+        document_loader = DocumentLoader()
+
+        # Load and process documents
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task("Loading documents...", total=None)
+            documents = document_loader.load_documents(path)
+            progress.update(task, completed=True)
+            console.print(f"[blue]Found {len(documents)} documents to process[/blue]")
+
+            task = progress.add_task("Chunking documents...", total=len(documents))
+            chunks = []
+            for i, doc in enumerate(documents, 1):
+                doc_chunks = document_loader.chunk_document(doc, chunk_size, chunk_overlap)
+                chunks.extend(doc_chunks)
+                console.print(f"[blue]Document {i}/{len(documents)}: Created {len(doc_chunks)} chunks[/blue]")
+                progress.advance(task)
+
+            console.print(f"[blue]Total chunks created: {len(chunks)}[/blue]")
+            console.print(f"[blue]Average chunks per document: {len(chunks)/len(documents):.1f}[/blue]")
+
+            task = progress.add_task("Generating embeddings...", total=len(chunks))
+            vectors = []
+            for chunk in chunks:
+                vector = embedding_model.embed_text(chunk.page_content)
+                vectors.append(vector)
+                progress.advance(task)
+
+            task = progress.add_task("Storing vectors...", total=len(chunks))
+            for chunk, vector in zip(chunks, vectors):
+                doc_id = str(uuid.uuid4())
+                store.store_vector(
+                    id=doc_id,
+                    vector=vector,
+                    content=chunk.page_content,
+                    metadata=chunk.metadata)
+                
+                progress.advance(task)
+
+        console.print(f"[green]Successfully ingested {len(documents)} documents![/green]")
+        console.print(f"[green]Total chunks processed: {len(chunks)}[/green]")
+        console.print(f"[green]Average chunk size: {sum(len(c.page_content) for c in chunks)/len(chunks):.0f} characters[/green]")
+    except Exception as e:
+        console.print(f"[red]Error during ingestion: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+@app.command()
+def query(
+    text: str = typer.Argument(..., help="Query text"),
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results to return"),
+    model: str = typer.Option("gpt-4o-mini", "--model", "-m", help="LLM model to use")
+):
+    """Query the RAG system."""
+    try:
+        # Initialize components
+        store = ChromaStore()
+        embedding_model = EmbeddingModel()
+        llm_client = LLMClient(model_name=model)
+
+        # Convert query to vector
+        query_vector = embedding_model.embed_text(text)
+
+        # Search for similar vectors
+        results = store.search_vectors(query_vector, top_k=top_k)
+
+        if not results:
+            console.print("[yellow]No relevant documents found.[/yellow]")
+            return
+
+        # Convert results to Langchain Documents
+        context_docs = []
+        for result in results:
+            doc = Document(
+                page_content=result["content"],
+                metadata=result["metadata"]
+            )
+            context_docs.append(doc)
+
+        # Generate answer using LLM
+        response = llm_client.generate_answer(text, context_docs)
+
+        # Display results
+        console.print("\n[bold]Answer:[/bold]")
+        console.print(Markdown(response["answer"]))
+        
+        console.print("\n[bold]Sources:[/bold]")
+        for source in response["sources"]:
+            console.print(f"- {source}")
+
+    except Exception as e:
+        console.print(f"[red]Error during query: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+@app.command()
+def clear(
+    force: bool = typer.Option(False, "--force", "-f", help="Force deletion without confirmation"),
+):
+    """Clear all documents from the RAG system."""
+    settings = get_settings()
+    
+    if not force:
+        confirm = typer.confirm("Are you sure you want to clear all documents? This cannot be undone.")
+        if not confirm:
+            console.print("Operation cancelled.")
+            raise typer.Exit()
+    
+    try:
+        store = ChromaStore(settings.chroma_db_path)
+        store.clear()
+        console.print(Panel("✅ All documents cleared successfully!", style="green"))
+    except Exception as e:
+        console.print(Panel(f"❌ Error: {str(e)}", style="red"))
+        raise typer.Exit(1)
+    finally:
+        store.close()
+
+@app.command()
+def chunks(
+    document_name: str = typer.Argument(..., help="Name of the document to show chunks for"),
+    top_k: Optional[int] = typer.Option(None, "--top-k", "-k", help="Number of chunks to show (default: all chunks)")
+):
+    """Show chunks for a specific document."""
+    try:
+        # Initialize components
+        store = ChromaStore()
+        
+        # Search for chunks from the specified document
+        results = store.search_by_source(document_name, top_k=top_k)
+        
+        if not results:
+            console.print(f"[yellow]No chunks found for document: {document_name}[/yellow]")
+            return
+        
+        # Display chunks
+        console.print(f"\n[bold]Chunks for document: {document_name}[/bold]")
+        console.print(f"Found {len(results)} chunks\n")
+        
+        for i, result in enumerate(results, 1):
+            # Create a panel for each chunk
+            chunk_panel = Panel(
+                f"[bold]Chunk {i}[/bold]\n\n{result['content']}\n\n"
+                f"[dim]Page: {result['metadata'].get('page_number', 'N/A')}[/dim]",
+                title=f"Chunk {i}",
+                border_style="blue"
+            )
+            console.print(chunk_panel)
+            console.print()  # Add spacing between chunks
+            
+    except Exception as e:
+        console.print(f"[red]Error retrieving chunks: {str(e)}[/red]")
+        raise typer.Exit(1)
+
+if __name__ == "__main__":
+    app() 
+
+
+
+// Relative Path: cli\__init__.py
+"""CLI module for the RAG system."""
+
+from rag.cli.main import app
+
+__all__ = ["app"] 
+
+
+
+// Relative Path: core\config.py
+import os
+from pathlib import Path
+from typing import Optional
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    """Application settings."""
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    chroma_db_path: str = "C:/Users/rudi/source/gpt-o4-mini/data/chroma"
+    database_path: str = "C:/Users/rudi/source/repos/raggie/test.db"  # Hinzugefügt
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    
+    # Azure OCR
+    AZURE_OCR_ENDPOINT: Optional[str] = None
+    AZURE_OCR_KEY: Optional[str] = None
+    AZURE_OCR_REGION: str = "westeurope"
+    
+
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "allow"  # Erlaubt zusätzliche Felder
+
+
+
+// Relative Path: core\interfaces.py
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+from .models import Document, Chunk, Vector, Prompt, Response, FinalAnswer
+
+class IParser(ABC):
+    """Interface for document parsers."""
+    
+    @abstractmethod
+    def parse(self, content: str, metadata: Dict[str, Any]) -> Document:
+        """Parse content into a Document object."""
+        pass
+
+class IChunker(ABC):
+    """Interface for text chunking strategies."""
+    
+    @abstractmethod
+    def chunk(self, document: Document) -> List[Chunk]:
+        """Split a document into chunks."""
+        pass
+
+class IVectorStore(ABC):
+    """Interface for vector storage implementations."""
+    
+    @abstractmethod
+    def store(self, vector: Vector) -> None:
+        """Store a vector in the database."""
+        pass
+    
+    @abstractmethod
+    def search(self, query_vector: Vector, limit: int = 5) -> List[Vector]:
+        """Search for similar vectors."""
+        pass
+
+class IRetriever(ABC):
+    """Interface for document retrieval."""
+    
+    @abstractmethod
+    def retrieve(self, query: str, limit: int = 5) -> List[Chunk]:
+        """Retrieve relevant chunks for a query."""
+        pass
+
+class IPromptBuilder(ABC):
+    """Interface for prompt construction."""
+    
+    @abstractmethod
+    def build(self, query: str, context: List[Chunk]) -> Prompt:
+        """Build a prompt from query and context."""
+        pass
+
+class ILLMClient(ABC):
+    """Interface for LLM interactions."""
+    
+    @abstractmethod
+    def generate(self, prompt: Prompt) -> Response:
+        """Generate a response from the LLM."""
+        pass
+
+class IPostProcessor(ABC):
+    """Interface for response post-processing."""
+    
+    @abstractmethod
+    def process(self, response: Response) -> FinalAnswer:
+        """Process and format the LLM response."""
+        pass
+
+class IDocumentLoader(ABC):
+    """Interface for document loading implementations."""
+    
+    @abstractmethod
+    def load(self, path: str) -> List[Document]:
+        """Load documents from a path."""
+        pass
+
+class IEmbedder(ABC):
+    """Interface for embedding implementations."""
+    
+    @abstractmethod
+    def embed(self, text: str) -> List[float]:
+        """Embed a text into a vector."""
+        pass 
+
+class IOCRProcessor(ABC):
+    """Interface for OCR processing."""
+    
+    @abstractmethod
+    def process(self, file_path: str) -> str:
+        """Process a document using OCR."""
+        pass
+
+
+
+
+// Relative Path: core\models.py
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+
+@dataclass
+class Document:
+    """Represents a source document in the RAG system."""
+    id: str
+    content: str
+    metadata: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+    source: str  # e.g., file path, URL, etc.
+
+    def __init__(self, id: str, content: str, metadata: Optional[Dict[str, Any]] = None, 
+                 created_at: Optional[datetime] = None, updated_at: Optional[datetime] = None, 
+                 source: Optional[str] = None):
+        self.id = id
+        self.content = content
+        self.metadata = metadata or {}
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+        self.source = source or self.metadata.get('source', '')
+
+@dataclass
+class Chunk:
+    """Represents a chunk of text from a document."""
+    id: str
+    content: str
+    document_id: str
+    metadata: Dict[str, Any]
+    start_index: int
+    end_index: int
+
+    def __init__(self, id: str, document_id: str, content: str, metadata: Optional[Dict[str, Any]] = None):
+        self.id = id
+        self.document_id = document_id
+        self.content = content
+        self.metadata = metadata or {}
+
+@dataclass
+class Vector:
+    """Represents a vector embedding."""
+    id: str
+    values: List[float]
+    metadata: Dict[str, Any]
+
+    def __init__(self, id: str, values: List[float], metadata: Optional[Dict[str, Any]] = None):
+        self.id = id
+        self.values = values
+        self.metadata = metadata or {}
+
+@dataclass
+class Prompt:
+    """Represents a prompt template with variables."""
+    template: str
+    variables: Dict[str, Any]
+
+@dataclass
+class Response:
+    """Represents a response from the LLM."""
+    content: str
+    sources: List[Dict[str, Any]]  # List of source documents used
+    metadata: Dict[str, Any]
+
+@dataclass
+class FinalAnswer:
+    """Represents the final answer with sources and metadata."""
+    content: str
+    sources: List[Dict[str, Any]]
+    confidence: float
+    metadata: Dict[str, Any]
+    created_at: datetime 
+
+
+
+// Relative Path: core\__init__.py
+"""
+Core components of the RAG system.
+"""
+
+from .models import Document, Chunk, Vector, Prompt, Response, FinalAnswer
+from .interfaces import (
+    IParser,
+    IChunker,
+    IEmbedder,
+    IVectorStore,
+    IRetriever,
+    IPromptBuilder,
+    ILLMClient,
+    IPostProcessor
+)
+
+from rag.core.config import Settings
+
+__all__ = ["Settings"] 
+
+
+
+// Relative Path: embedding\embedder.py
+from typing import Dict, Any
+from ..core.interfaces import IEmbedder
+from ..core.models import Vector
+import uuid
+
+class BaseEmbedder(IEmbedder):
+    """Base class for embedding generators."""
+    
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+    
+    def embed(self, text: str, metadata: Dict[str, Any]) -> Vector:
+        """Generate embeddings for text."""
+        raise NotImplementedError("Subclasses must implement embed()")
+    
+    def _create_vector(self, values: list[float], metadata: Dict[str, Any]) -> Vector:
+        """Create a new vector with metadata."""
+        return Vector(
+            id=str(uuid.uuid4()),
+            values=values,
+            metadata={
+                **metadata,
+                "model_name": self.model_name,
+                "embedding_dim": len(values)
+            }
+        ) 
+
+
+
+// Relative Path: embedding\embeddings.py
+from typing import List
+
+from langchain_openai import OpenAIEmbeddings
+
+class EmbeddingModel:
+    """Handles text embedding operations."""
+
+    def __init__(self):
+        self.embeddings = OpenAIEmbeddings()
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        return self.embeddings.embed_documents(texts)
+
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query."""
+        return self.embeddings.embed_query(text)
+        
+    def embed_text(self, text: str) -> List[float]:
+        """Embed a single text string."""
+        return self.embed_query(text) 
+
+
+
+// Relative Path: embedding\text_embedder.py
+from typing import Dict, Any
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from .embedder import BaseEmbedder
+from ..core.models import Vector
+
+class TextEmbedder(BaseEmbedder):
+    """Text embedding generator using sentence-transformers."""
+    
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        super().__init__(model_name)
+        self.model = SentenceTransformer(model_name)
+    
+    def embed(self, text: str, metadata: Dict[str, Any]) -> Vector:
+        """Generate embeddings for text using sentence-transformers."""
+        # Generate embedding
+        embedding = self.model.encode(text, convert_to_numpy=True)
+        
+        # Convert to list for storage
+        embedding_list = embedding.tolist()
+        
+        # Create vector with metadata
+        return self._create_vector(
+            values=embedding_list,
+            metadata={
+                **metadata,
+                "text_length": len(text),
+                "embedding_type": "text"
+            }
+        ) 
+
+
+
+// Relative Path: embedding\__init__.py
+"""
+Embedding generation components.
+"""
+
+from .embedder import BaseEmbedder
+from .text_embedder import TextEmbedder 
+
+
+
+// Relative Path: ingestion\advanced_pdf_loader.py
+from typing import List, Dict, Any, Optional, Union, Iterator
+from pathlib import Path, PurePath
+from io import BytesIO
+import base64
+import pdfplumber
+from PIL import Image
+from langchain_core.documents import Document
+from langchain_community.document_loaders.pdf import BasePDFLoader
+from rag.llm.vision_model import create_vision_model, VisionModel
+
+class AdvancedPDFLoader(BasePDFLoader):
+    """Advanced PDF loader that handles text, tables, and images with optional vision model support."""
+    
+    def __init__(
+        self,
+        file_path: Union[str, PurePath],
+        include_images: bool = True,
+        include_tables: bool = True,
+        vision_model: Optional[VisionModel] = None,
+        headers: Optional[dict] = None
+    ):
+        """Initialize the loader.
+        
+        Args:
+            file_path: Path to the PDF file (local, S3, or web path)
+            include_images: Whether to process images
+            include_tables: Whether to process tables
+            vision_model: Optional vision model for image descriptions
+            headers: Optional headers for web requests
+        """
+        super().__init__(file_path, headers=headers)
+        self.include_images = include_images
+        self.include_tables = include_tables
+        self.vision_model = vision_model
+
+    def _process_image(self, image: Image.Image) -> Dict[str, Any]:
+        """Process an image and get its description if vision model is available."""
+        img_byte_arr = BytesIO()
+        image.save(img_byte_arr, format='JPEG' if image.mode == 'RGB' else 'PNG')
+        image_b64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+        
+        description = ""
+        if self.vision_model:
+            try:
+                description = self.vision_model.describe_image(image)
+            except Exception as e:
+                print(f"Error getting image description: {e}")
+        
+        return {
+            "image_base64": image_b64,
+            "description": description
+        }
+
+    def _process_table(self, table: List[List[str]]) -> str:
+        """Convert a table to a readable text format."""
+        if not table:
+            return ""
+        
+        # Convert table to markdown format
+        markdown_table = []
+        # Add header
+        markdown_table.append("| " + " | ".join(str(cell) for cell in table[0]) + " |")
+        markdown_table.append("| " + " | ".join(["---"] * len(table[0])) + " |")
+        # Add rows
+        for row in table[1:]:
+            markdown_table.append("| " + " | ".join(str(cell) for cell in row) + " |")
+        
+        return "\n".join(markdown_table)
+
+    # Please look at the BaseLoader. There it is stated that this method shall
+    # be implemented in all the existing subclasses. Do not implement the load method!!!!!!
+    def lazy_load(self) -> Iterator[Document]:
+        """Lazily load and process the PDF file page by page.
+        
+        Yields:
+            Document objects containing text, tables, and images for each page.
+        """
+        try:
+            with pdfplumber.open(self.file_path) as pdf:
+                print(f"Processing PDF: {self.file_path}")
+                print(f"Total pages: {len(pdf.pages)}")
+                
+                for page_num, page in enumerate(pdf.pages):
+                    print(f"\nProcessing page {page_num + 1}/{len(pdf.pages)}")
+                    
+                    # Extract text
+                    text_content = page.extract_text() or ""                    
+                    word_count = len(text_content.split())
+                    print(f"Extracted {word_count} words from page {page_num + 1}")
+                    
+                    # Initialize metadata
+                    file_name_path = Path(self.file_path)
+                    metadata = {
+                        "source": str(self.source),
+                        "file_name": file_name_path.name,
+                        "page_number": page_num + 1,
+                        "content_type": "text",
+                        "has_tables": False,
+                        "has_images": False,
+                        "image_count": 0
+                    }
+                    
+                    if self.include_tables:
+                        tables = page.extract_tables()
+                        if tables:
+                            print(f"Found {len(tables)} tables on page {page_num + 1}")
+                            table_texts = [self._process_table(table) for table in tables]
+                            text_content += "\n\nTables:\n" + "\n\n".join(table_texts)
+                            metadata["has_tables"] = True
+                        else:
+                            print(f"No tables found on page {page_num + 1}")
+                                        
+                    if self.include_images or word_count < 100:
+                        image_descriptions = []
+                        processed_images = []
+                        
+                        # Process page as image if text is sparse, otherwise process embedded images
+                        images_to_process = []
+                        if word_count < 100:
+                            try:
+                                print(f"Converting page {page_num + 1} to image due to sparse text")
+                                images_to_process.append(page.to_image().original)
+                            except Exception as e:
+                                print(f"Error converting page {page_num + 1} to image: {str(e)}")
+                        elif page.images:
+                            print(f"Found {len(page.images)} embedded images on page {page_num + 1}")
+                            for img_num, img in enumerate(page.images, 1):
+                                try:
+                                    images_to_process.append(Image.open(BytesIO(img['stream'].get_data())))
+                                except Exception as e:
+                                    print(f"Error processing image {img_num} on page {page_num + 1}: {str(e)}")
+                        
+                        for img_num, image in enumerate(images_to_process, 1):
+                            print(f"Processing image {img_num}/{len(images_to_process)} on page {page_num + 1}")
+                            processed = self._process_image(image)
+                            if processed["description"]:
+                                print(f"Generated description for image {img_num}")
+                                image_descriptions.append(processed["description"])
+                            processed_images.append(processed)
+                        
+                        if image_descriptions:
+                            print(f"Added {len(image_descriptions)} image descriptions to page {page_num + 1}")
+                            text_content += "\n\n" + "\n".join(image_descriptions)
+                            metadata["has_images"] = True
+                            metadata["image_count"] = len(processed_images)
+                    
+                    if text_content.strip():
+                        yield Document(
+                            page_content=text_content.strip(),
+                            metadata=metadata
+                        )
+                    else:
+                        print(f"No content extracted from page {page_num + 1}")
+        
+        except Exception as e:
+            print(f"Error processing PDF {self.file_path}: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            raise
+
+# Example usage:
+def load_pdf_for_rag(
+    file_path: Union[str, PurePath],
+    vision_model: Optional[Any] = None,
+    include_images: bool = True,
+    include_tables: bool = True,
+    headers: Optional[dict] = None
+) -> List[Document]:
+    """
+    Load a PDF file and prepare it for RAG.
+    
+    Args:
+        file_path: Path to the PDF file (local, S3, or web path)
+        vision_model: Optional vision model for image descriptions
+        include_images: Whether to process images
+        include_tables: Whether to process tables
+        headers: Optional headers for web requests
+    
+    Returns:
+        List of Document objects ready for RAG
+    """
+    loader = AdvancedPDFLoader(
+        file_path=file_path,
+        include_images=include_images,
+        include_tables=include_tables,
+        vision_model=vision_model,
+        headers=headers
+    )
+    return loader.load()
+
+
+if __name__ == "__main__":
+    import os
+
+    file_path = r"YOUR_PDF_PATH"
+    vision_model = create_vision_model(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model_name="gpt-4.1-nano",
+        max_tokens=300,
+    )
+
+    documents = load_pdf_for_rag(
+        file_path=file_path,
+        vision_model=vision_model,
+        include_images=True,
+        include_tables=True
+    )
+    for document in documents:
+        print(document.page_content)
+        print("\n--------------------------------\n")
+
+
+
+
+// Relative Path: ingestion\document_loader.py
+import os
+from pathlib import Path
+from typing import List, Optional, Union
+import uuid
+from datetime import datetime
+
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+    UnstructuredMarkdownLoader,
+)
+from langchain.schema import Document as LangchainDocument
+
+from rag.core.models import Document as RagDocument, Chunk
+from rag.chunking import ChunkerFactory
+from rag.llm.vision_model import create_vision_model
+from .advanced_pdf_loader import AdvancedPDFLoader
+
+class DocumentLoader:
+    """Handles loading and processing of various document types."""
+
+    def __init__(self):
+        # We'll create the appropriate chunker when needed
+        self.chunker = None
+
+    def load_documents(
+        self, path: Union[str, Path], recursive: bool = False
+    ) -> List[LangchainDocument]:
+        """Load documents from the given path."""
+        path = Path(path)
+        documents = []
+
+        if path.is_file():
+            documents.extend(self._load_single_file(path))
+        elif path.is_dir():
+            pattern = "**/*" if recursive else "*"
+            for file_path in path.glob(pattern):
+                if file_path.is_file():
+                    documents.extend(self._load_single_file(file_path))
+
+        return documents
+
+    def _load_single_file(self, file_path: Path) -> List[LangchainDocument]:
+        """Load a single file based on its extension."""
+        loader = self._get_loader(file_path)
+        if loader:
+            return loader.load()
+        return []
+
+    def _get_loader(self, file_path: Path):
+        """Get the appropriate loader for the file type."""
+        suffix = file_path.suffix.lower()
+        if suffix == ".pdf":
+            # return PyPDFLoader(str(file_path))
+            vision_model = create_vision_model(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model_name="gpt-4.1-nano",
+                max_tokens=300,
+            )
+
+            return AdvancedPDFLoader(
+                file_path=file_path,
+                vision_model=vision_model,
+                include_images=True,
+                include_tables=True
+            )
+        elif suffix == ".txt":
+            return TextLoader(str(file_path))
+        elif suffix == ".md":
+            return UnstructuredMarkdownLoader(str(file_path))
+        return None
+
+    def chunk_document(
+        self, document: LangchainDocument, chunk_size: int = 1000, chunk_overlap: int = 200
+    ) -> List[LangchainDocument]:
+        """Split a document into chunks using the appropriate chunker."""
+        # Get the source file path from metadata
+        source_path = document.metadata.get('source', '')
+        
+        # Create the appropriate chunker based on the file type
+        self.chunker = ChunkerFactory.get_chunker_for_file(
+            source_path,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        
+        print(f"Using chunker: {self.chunker.__class__.__name__} for document: {source_path}")
+        
+        # Convert LangchainDocument to our RagDocument
+        rag_document = RagDocument(
+            id=str(uuid.uuid4()),
+            content=document.page_content,
+            metadata=document.metadata,
+            source=source_path,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        
+        # Use our custom chunker
+        chunks = self.chunker.chunk(rag_document)
+        
+        # Convert our Chunks back to LangchainDocuments
+        langchain_chunks = []
+        for chunk in chunks:
+            langchain_chunk = LangchainDocument(
+                page_content=chunk.content,
+                metadata={
+                    **document.metadata,
+                    "chunk_id": chunk.id,
+                    "document_id": chunk.document_id,
+                    "start_index": chunk.metadata.get("start_index", 0),
+                    "end_index": chunk.metadata.get("end_index", 0),
+                    "chunker_type": self.chunker.__class__.__name__
+                }
+            )
+            langchain_chunks.append(langchain_chunk)
+        
+        return langchain_chunks 
+
+
+
+// Relative Path: ingestion\file_parser.py
+from typing import Dict, Any, Type
+from ..core.interfaces import IParser
+from ..core.models import Document
+from datetime import datetime
+import os
+
+class BaseFileParser(IParser):
+    """Base class for file parsers."""
+    
+    def __init__(self, supported_extensions: list[str]):
+        self.supported_extensions = supported_extensions
+    
+    def can_parse(self, file_path: str) -> bool:
+        """Check if the file can be parsed by this parser."""
+        _, ext = os.path.splitext(file_path)
+        return ext.lower() in self.supported_extensions
+    
+    def parse(self, content: str, metadata: Dict[str, Any]) -> Document:
+        """Parse content into a Document object."""
+        raise NotImplementedError("Subclasses must implement parse()")
+
+class ParserRegistry:
+    """Registry for file parsers."""
+    
+    def __init__(self):
+        self._parsers: Dict[str, Type[BaseFileParser]] = {}
+    
+    def register(self, parser: Type[BaseFileParser]) -> None:
+        """Register a new parser."""
+        for ext in parser.supported_extensions:
+            self._parsers[ext.lower()] = parser
+    
+    def get_parser(self, file_path: str) -> BaseFileParser:
+        """Get the appropriate parser for a file."""
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        if ext not in self._parsers:
+            raise ValueError(f"No parser registered for extension: {ext}")
+        
+        return self._parsers[ext]() 
+
+
+
+// Relative Path: ingestion\markdown_parser.py
+from typing import Dict, Any
+from datetime import datetime
+import uuid
+import markdown
+from .file_parser import BaseFileParser
+from ..core.models import Document
+
+class MarkdownParser(BaseFileParser):
+    """Parser for Markdown files."""
+    
+    def __init__(self):
+        super().__init__(supported_extensions=[".md", ".markdown"])
+        self.md = markdown.Markdown(extensions=['extra'])
+    
+    def parse(self, content: str, metadata: Dict[str, Any]) -> Document:
+        """Parse Markdown content into a Document object."""
+        # Convert markdown to HTML for better text extraction
+        html_content = self.md.convert(content)
+        
+        # Create document with metadata
+        doc = Document(
+            id=str(uuid.uuid4()),
+            content=content,  # Store original markdown
+            metadata={
+                **metadata,
+                "html_content": html_content,
+                "parsed_at": datetime.utcnow().isoformat()
+            },
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            source=metadata.get("source", "unknown")
+        )
+        
+        return doc 
+
+
+
+// Relative Path: ingestion\ocr.py
+from pathlib import Path
+from typing import List, Optional
+import time
+import logging
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.documentintelligence import DocumentIntelligenceClient
+from rich.console import Console
+from rich.logging import RichHandler
+from pydantic import BaseModel
+
+
+from rag.core.config import Settings
+from rag.core.interfaces import IOCRProcessor
+
+settings = Settings()
+
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(rich_tracebacks=True)]
+)
+logger = logging.getLogger("azure_ocr")
+
+class OCRResponse(BaseModel):
+    """Model for OCR response data"""
+    page_number: int
+    text: str
+    confidence: float = 1.0  # Default to 1.0 since confidence is not provided by the API
+
+
+class AzureOCRProcessor(IOCRProcessor):
+    """Class for processing documents using Azure OCR"""
+
+    def __init__(self):
+        super().__init__()
+        self.max_retries = 3
+        self.retry_delay = 1
+        self.timeout = 30
+        self.endpoint = settings.AZURE_OCR_ENDPOINT
+        self.api_key = settings.AZURE_OCR_KEY
+        self.is_initialized = False
+
+    def setup(self):
+        """Initialize the Azure Document Intelligence client"""
+        if not self.endpoint or not self.api_key:
+            raise ValueError("Azure OCR endpoint and API key must be configured")
+        
+        self.client = DocumentIntelligenceClient(
+            endpoint=self.endpoint,
+            credential=AzureKeyCredential(self.api_key)
+        )
+        self.is_initialized = True
+
+    def _process_document(self, file_path: Path, retry_count: int = 0) -> dict:
+        """Process document with retry logic"""
+        try:
+            with open(file_path, "rb") as file:
+                document_bytes = file.read()
+                poller = self.client.begin_analyze_document(
+                    "prebuilt-read",
+                    document_bytes
+                )
+                result = poller.result()
+                return result
+        except Exception as e:
+            if retry_count < self.max_retries:
+                logger.warning(f"Request failed, retrying ({retry_count + 1}/{self.max_retries}): {str(e)}")
+                time.sleep(self.retry_delay * (2 ** retry_count))  # Exponential backoff
+                return self._process_document(file_path, retry_count + 1)
+            raise Exception(f"Failed to process document after {self.max_retries} attempts: {str(e)}")
+
+    def _extract_text_from_result(self, result: dict) -> str:
+        """Extract text and metadata from OCR result and return it as a text string"""
+        
+        text = ""
+        text_lines = []        
+        # Process each page
+        for page_idx, page in enumerate(result.pages, 1):
+            text_lines.append(f"Page {page_idx}\n")
+            # Extract lines from the page
+            for line in page.lines:
+                text_lines.append(line.content)
+
+        text = "\n".join(text_lines)
+
+        print(text)
+
+        return text        
+
+    def forward(self, file_path: str) -> str:
+        """
+        Process a document using Azure Document Intelligence.
+        
+        Args:
+            file_path: Path to the document file to process
+            
+        Returns:
+            A text string of the extracted text from the document
+        """
+        if not self.is_initialized:
+            self.setup()
+
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        logger.info(f"Processing document: {file_path}")
+        
+        try:
+            result = self._process_document(file_path)        
+            responses = self._extract_text_from_result(result)
+            
+            logger.info(f"Successfully processed document with {len(responses)} pages")
+            return responses
+            
+        except Exception as e:
+            logger.error(f"Error processing document: {str(e)}")
+            raise          
+
+    def process(self, file_path: str) -> str:
+        """Process a document using OCR."""
+        return self.forward(file_path)
+
+
+
+
+// Relative Path: ingestion\__init__.py
+"""
+Document ingestion and parsing components.
+"""
+
+from .file_parser import BaseFileParser, ParserRegistry
+from .markdown_parser import MarkdownParser 
+from .ocr import AzureOCRProcessor
+
+__all__ = [
+    "BaseFileParser",
+    "ParserRegistry",
+    "MarkdownParser",
+    "AzureOCRProcessor"
+]
+
+
+
+
+
+// Relative Path: llm\llm_client.py
+from typing import List, Dict, Any
+import os
+
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import Document
+
+class LLMClient:
+    """Client for interacting with language models."""
+
+    def __init__(self, model_name: str = "gpt-3.5-turbo"):
+        # Map custom model names to OpenAI models if needed
+        model_mapping = {
+            "gpt-o4-mini": "gpt-3.5-turbo",  # Fallback to gpt-3.5-turbo for custom models
+        }
+        
+        # Use mapped model name or original if not in mapping
+        actual_model = model_mapping.get(model_name, model_name)
+        
+        # Initialize the model with error handling
+        try:
+            self.model = ChatOpenAI(model_name=actual_model)
+        except Exception as e:
+            print(f"Error initializing model {model_name}: {str(e)}")
+            print(f"Falling back to gpt-3.5-turbo")
+            self.model = ChatOpenAI(model_name="gpt-3.5-turbo")
+            
+        self.prompt_template = ChatPromptTemplate.from_messages([
+            ("system", "You are a helpful AI assistant that answers questions based on the provided context. "
+                      "If you cannot answer the question based on the context, say so. "
+                      "Always cite your sources using the document IDs provided."),
+            ("human", "Context:\n{context}\n\nQuestion: {question}\n\nAnswer:")
+        ])
+
+    def generate_answer(self, question: str, context_docs: List[Document]) -> Dict[str, Any]:
+        """Generate an answer based on the question and context documents."""
+        try:
+            # Format context from documents
+            context_text = "\n\n".join([
+                f"Document {i+1} (ID: {doc.metadata.get('source', 'unknown')}):\n{doc.page_content}"
+                for i, doc in enumerate(context_docs)
+            ])
+            
+            # Create the prompt
+            prompt = self.prompt_template.format_messages(
+                context=context_text,
+                question=question
+            )
+            
+            # Generate response
+            response = self.model.invoke(prompt)
+            
+            # Extract answer and sources
+            answer = response.content
+            sources = [doc.metadata.get('source', 'unknown') for doc in context_docs]
+            
+            return {
+                "answer": answer,
+                "sources": sources
+            }
+        except Exception as e:
+            return {
+                "answer": f"I encountered an error while generating an answer: {str(e)}",
+                "sources": []
+            } 
+
+
+
+// Relative Path: llm\vision_model.py
+from typing import Optional, Dict, Any
+from PIL import Image
+import base64
+from io import BytesIO
+import os
+from litellm import completion
+
+class VisionModel:
+    """A vision model that uses OpenAI's GPT-4 Vision to describe images via litellm."""
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: str = "gpt-4.1-mini",
+        max_tokens: int = 500,
+        temperature: float = 0.7
+    ):
+        """Initialize the vision model.
+        
+        Args:
+            api_key: OpenAI API key. If not provided, will use OPENAI_API_KEY env var
+            model_name: Name of the OpenAI model to use
+            max_tokens: Maximum number of tokens to generate
+            temperature: Sampling temperature (0-1)
+        """
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("OpenAI API key must be provided or set in OPENAI_API_KEY environment variable")
+        
+        os.environ["OPENAI_API_KEY"] = self.api_key
+        self.model_name = model_name
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        
+        # Default system prompt for image description
+        self.system_prompt = """
+You are an expert at analyzing and describing images in detail. 
+Your task is to provide a clear, concise, and accurate description of the image content.
+
+Please focus on:
+1. Main subject and key elements
+2. Text content if present
+3. Layout and structure
+4. Important details that might be relevant for document understanding
+
+Be specific but concise in your description.
+Focus on the text content and how it is structured.
+
+Please structure your response in the following format:
+
+[Brief description of the main subject/focus]
+
+[Any text found in the image. Group text by the same topic together.]
+
+[Description of layout and structure, keep it short and concise]
+
+Keep your response clear, compact and structured but in plain text format.
+Provide the description in the same language as any text found in the image. If no text is present, default to German.
+"""
+
+    def _image_to_base64(self, image: Image.Image) -> str:
+        """Convert PIL Image to base64 string."""
+        buffered = BytesIO()
+        # Convert to RGB if necessary
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        image.save(buffered, format="JPEG")
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+    def describe_image(self, image: Image.Image) -> str:
+        """Describe an image using the vision model.
+        
+        Args:
+            image: PIL Image object to describe
+            
+        Returns:
+            str: Description of the image
+        """
+        try:
+            # Convert image to base64
+            base64_image = self._image_to_base64(image)
+            
+            # Prepare the message for the API
+            messages = [
+                {
+                    "role": "system", 
+                    "content": self.system_prompt 
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please describe this image in detail, following the structured format provided. Focus on text content and important visual elements."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+            
+            # Call the API using litellm
+            response = completion(
+                model=self.model_name,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            print(f"Error describing image: {e}")
+            return ""
+
+def create_vision_model(
+    api_key: Optional[str] = None,
+    model_name: str = "gpt-4.1-mini",
+    max_tokens: int = 500,
+    temperature: float = 0.7
+) -> VisionModel:
+    """Create a vision model instance.
+    
+    Args:
+        api_key: OpenAI API key
+        model_name: Name of the OpenAI model to use
+        max_tokens: Maximum number of tokens to generate
+        temperature: Sampling temperature (0-1)
+        
+    Returns:
+        VisionModel instance
+    """
+    return VisionModel(
+        api_key=api_key,
+        model_name=model_name,
+        max_tokens=max_tokens,
+        temperature=temperature
+    )
+
+
+
+
+// Relative Path: store\chroma_store.py
+from typing import List, Dict, Any, Optional
+import os
+import chromadb
+from chromadb.config import Settings as ChromaSettings
+from .vector_store import BaseVectorStore
+from ..core.models import Vector
+
+class ChromaStore(BaseVectorStore):
+    """ChromaDB-based vector storage implementation."""
+    
+    def __init__(self, persist_directory: Optional[str] = None):
+        super().__init__("rag_documents")
+        
+        # Set default persist directory if none provided
+        if persist_directory is None:
+            # Use a default directory in the current working directory
+            persist_directory = os.path.join(os.getcwd(), "data", "chroma")
+            # Ensure directory exists
+            os.makedirs(persist_directory, exist_ok=True)
+        
+        # Initialize ChromaDB client
+        self.client = chromadb.Client(
+            ChromaSettings(
+                persist_directory=persist_directory,
+                is_persistent=True,
+            )
+        )
+        
+        # Get or create collection
+        self.collection = self.client.get_or_create_collection("rag_documents")
+        
+        # Set embedding dimension (default for OpenAI embeddings)
+        self.embedding_dimension = 1536
+    
+    def store(self, vectors: List[List[float]], ids: List[str], metadatas: List[Dict[str, Any]] = None) -> None:
+        """Store vectors in ChromaDB."""
+        # Use upsert=True to update existing vectors with the same ID
+        self.collection.upsert(
+            embeddings=vectors,
+            ids=ids,
+            metadatas=metadatas
+        )
+    
+    def search(self, query_vector: List[float], n_results: int = 5) -> List[Dict[str, Any]]:
+        """Search for similar vectors in ChromaDB."""
+        # Perform similarity search
+        results = self.collection.query(
+            query_embeddings=[query_vector],
+            n_results=n_results,
+            include=["embeddings", "metadatas", "distances"]
+        )
+        
+        # Format results
+        formatted_results = []
+        if results["ids"] and len(results["ids"]) > 0:
+            for i in range(len(results["ids"][0])):
+                result = {
+                    "id": results["ids"][0][i],
+                    "embedding": results.get("embeddings", [[]])[0][i] if results.get("embeddings") else None,
+                    "metadata": results.get("metadatas", [[]])[0][i] if results.get("metadatas") else None,
+                    "distance": results.get("distances", [[]])[0][i] if results.get("distances") else None
+                }
+                formatted_results.append(result)
+        
+        return formatted_results
+    
+    def close(self):
+        """Close the ChromaDB client."""
+        # ChromaDB doesn't have a direct cleanup method
+        # We can just set references to None to allow garbage collection
+        if hasattr(self, "collection"):
+            self.collection = None
+        if hasattr(self, "client"):
+            self.client = None
+
+    def store_vectors(
+        self,
+        ids: List[str],
+        embeddings: List[List[float]],
+        metadatas: List[dict],
+        documents: List[str],
+    ) -> None:
+        """Store vectors in the collection."""
+        self.collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            documents=documents,
+        )
+
+    def store_vector(
+        self,
+        id: str,
+        vector: List[float],
+        content: str,
+        metadata: Dict[str, Any],
+    ) -> None:
+        """Store a single vector in the collection."""
+        self.collection.add(
+            ids=[id],
+            embeddings=[vector],
+            metadatas=[metadata],
+            documents=[content],
+        )
+
+    def search_vectors(
+        self,
+        query_vector: List[float],
+        top_k: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Search for similar vectors."""
+        results = self.collection.query(
+            query_embeddings=[query_vector],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"]
+        )
+        
+        # Format results
+        formatted_results = []
+        if results["ids"] and len(results["ids"]) > 0:
+            for i in range(len(results["ids"][0])):
+                result = {
+                    "id": results["ids"][0][i],
+                    "content": results.get("documents", [[]])[0][i] if results.get("documents") else "",
+                    "metadata": results.get("metadatas", [[]])[0][i] if results.get("metadatas") else {},
+                    "distance": results.get("distances", [[]])[0][i] if results.get("distances") else None
+                }
+                formatted_results.append(result)
+        
+        return formatted_results
+
+    def clear(self) -> None:
+        """Clear all vectors from the collection."""
+        self.collection.delete()
+
+    def search_by_source(self, source: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Search for chunks from a specific source document.
+        
+        Args:
+            source: Name of the document to search for (can be partial path)
+            top_k: Number of results to return. If None, returns all chunks.
+            
+        Returns:
+            List of dictionaries containing chunk content and metadata
+        """
+        try:
+            # Create a filter for the source using contains operator
+            where = {
+                "source": {
+                    "$in": source
+                }
+            }
+            
+            # Query the collection using metadata filtering
+            results = self.collection.get(
+                where=where,
+                limit=top_k if top_k is not None else None,
+                include=["metadatas", "documents"]
+            )
+            
+            # Format results
+            formatted_results = []
+            if results["documents"] and len(results["documents"]) > 0:
+                for i in range(len(results["documents"])):
+                    formatted_results.append({
+                        "content": results["documents"][i],
+                        "metadata": results["metadatas"][i]
+                    })
+            
+            return formatted_results
+            
+        except Exception as e:
+            print(f"Error searching by source: {e}")
+            return [] 
+
+
+
+// Relative Path: store\vector_store.py
+from typing import List, Dict, Any
+from ..core.interfaces import IVectorStore
+from ..core.models import Vector
+import numpy as np
+
+class BaseVectorStore(IVectorStore):
+    """Base class for vector storage implementations."""
+    
+    def __init__(self, collection_name: str):
+        self.collection_name = collection_name
+    
+    def store(self, vector: Vector) -> None:
+        """Store a vector in the database."""
+        raise NotImplementedError("Subclasses must implement store()")
+    
+    def search(self, query_vector: Vector, limit: int = 5) -> List[Vector]:
+        """Search for similar vectors."""
+        raise NotImplementedError("Subclasses must implement search()")
+    
+    def _calculate_similarity(self, vec1: Vector, vec2: Vector) -> float:
+        """Calculate cosine similarity between two vectors."""
+        v1 = np.array(vec1.values)
+        v2 = np.array(vec2.values)
+        
+        # Normalize vectors
+        v1_norm = v1 / np.linalg.norm(v1)
+        v2_norm = v2 / np.linalg.norm(v2)
+        
+        # Calculate cosine similarity
+        return float(np.dot(v1_norm, v2_norm)) 
+
+
+
+// Relative Path: store\__init__.py
+"""Store module for vector storage implementations."""
+
+from .vector_store import BaseVectorStore
+from .chroma_store import ChromaStore
+
+__all__ = ["BaseVectorStore", "ChromaStore"] 
+
+
+
+// Relative Path: __init__.py
+"""RAG System package."""
+
+__version__ = "0.1.0" 
+
+
+

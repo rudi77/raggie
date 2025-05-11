@@ -1,0 +1,52 @@
+@startuml
+' Component diagram for RAG system
+skinparam dpi 150
+skinparam componentStyle rectangle
+
+' Define components and interfaces
+[CLI] <<component>>
+[DocumentLoader] <<component>>
+[ParserRegistry] <<component>>
+[AdvancedPDFLoader] <<component>>
+[ChunkerFactory] <<component>>
+[EmbeddingModel] <<component>>
+[ChromaStore] <<component>>
+[LLMClient] <<component>>
+[VisionModel] <<component>>
+[AzureOCRProcessor] <<component>>
+
+interface IParser
+interface IChunker
+interface IVectorStore
+interface IEmbedder
+interface ILLMClient
+interface IOCRProcessor
+
+' Interfaces implementation
+ParserRegistry --> IParser
+ChunkerFactory --> IChunker
+ChromaStore --> IVectorStore
+EmbeddingModel --> IEmbedder
+LLMClient --> ILLMClient
+AzureOCRProcessor --> IOCRProcessor
+VisionModel ..> ILLMClient : uses
+
+' Component dependencies
+CLI --> DocumentLoader : uses
+CLI --> ChunkerFactory : uses
+CLI --> EmbeddingModel : uses
+CLI --> ChromaStore : uses
+CLI --> LLMClient : uses
+
+DocumentLoader --> ParserRegistry : queries
+DocumentLoader --> AdvancedPDFLoader : selects
+AdvancedPDFLoader --> VisionModel : optionally uses
+DocumentLoader --> AzureOCRProcessor : optionally uses
+
+ChunkerFactory --> Chunkers : instantiates
+EmbeddingModel --> OpenAIEmbeddings : wraps
+ChromaStore --> chromadb.Client : connects
+LLMClient --> ChatOpenAI : wraps
+VisionModel --> litellm.completion : calls
+
+@enduml

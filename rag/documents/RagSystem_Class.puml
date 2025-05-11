@@ -1,0 +1,151 @@
+@startuml
+' Layout adjustments for vertical orientation
+skinparam dpi 150
+skinparam nodesep 20
+skinparam ranksep 40
+' Use top-down layout
+top to bottom direction
+
+' Define packages
+package core.models {
+class Document {
+\- id: String
+\- content: String
+\- metadata: Map\<String, Any>
+\- created\_at: DateTime
+\- updated\_at: DateTime
+\- source: String
+}
+class Chunk {
+\- id: String
+\- content: String
+\- document\_id: String
+\- metadata: Map\<String, Any>
+}
+class Vector {
+\- id: String
+\- values: List<Float>
+\- metadata: Map\<String, Any>
+}
+class Prompt {
+\- template: String
+\- variables: Map\<String, Any>
+}
+class Response {
+\- content: String
+\- sources: List\<Map\<String, Any>>
+\- metadata: Map\<String, Any>
+}
+class FinalAnswer {
+\- content: String
+\- sources: List\<Map\<String, Any>>
+\- confidence: Float
+\- metadata: Map\<String, Any>
+\- created\_at: DateTime
+}
+}
+
+package core.interfaces {
+interface IParser
+interface IChunker
+interface IVectorStore
+interface IRetriever
+interface IPromptBuilder
+interface ILLMClient
+interface IPostProcessor
+interface IDocumentLoader
+interface IEmbedder
+interface IOCRProcessor
+}
+
+package chunking {
+abstract class BaseChunker {
+\- chunk\_size: int
+\- chunk\_overlap: int
+\+ chunk(document: Document): List<Chunk>
+\# \_create\_chunk(...): Chunk
+}
+class TokenChunker
+class RecursiveCharacterChunker
+class MarkdownChunker
+class HTMLChunker
+class PageWiseChunker
+class ChunkerFactory
+
+BaseChunker <|-- TokenChunker
+BaseChunker <|-- RecursiveCharacterChunker
+BaseChunker <|-- MarkdownChunker
+BaseChunker <|-- HTMLChunker
+BaseChunker <|-- PageWiseChunker
+}
+
+package ingestion {
+class DocumentLoader
+class AdvancedPDFLoader
+class BaseFileParser
+class ParserRegistry
+class MarkdownParser
+class AzureOCRProcessor
+
+DocumentLoader ..> BaseFileParser : uses
+DocumentLoader ..> AdvancedPDFLoader : uses
+BaseFileParser <|-- MarkdownParser
+AzureOCRProcessor ..|> IOCRProcessor
+}
+
+package embedding {
+abstract class BaseEmbedder {
+\- model\_name: String
+\# \_create\_vector(...): Vector
+}
+class TextEmbedder
+class EmbeddingModel
+
+BaseEmbedder <|-- TextEmbedder
+}
+
+package store {
+abstract class BaseVectorStore {
+\+ store(vector: Vector)
+\+ search(query\_vector: Vector): List<Vector>
+}
+class ChromaStore
+
+BaseVectorStore <|-- ChromaStore
+}
+
+package llm {
+class LLMClient
+class VisionModel
+
+LLMClient ..> Prompt
+LLMClient ..> Response
+VisionModel ..> Image : processes
+}
+
+package cli {
+class ingest
+class query
+class clear
+class chunks
+
+ingest ..> DocumentLoader
+ingest ..> ChunkerFactory
+ingest ..> EmbeddingModel
+ingest ..> ChromaStore
+query ..> LLMClient
+clear ..> ChromaStore
+chunks ..> ChromaStore
+}
+
+' Interfaces implementations
+IParser <|.. BaseFileParser
+IChunker <|.. BaseChunker
+IVectorStore <|.. BaseVectorStore
+IDocumentLoader <|.. DocumentLoader
+IEmbedder <|.. BaseEmbedder
+ILLMClient <|.. LLMClient
+IPromptBuilder <|.. LLMClient
+IPostProcessor <|.. LLMClient
+IRetriever <|.. ChromaStore
+@enduml
