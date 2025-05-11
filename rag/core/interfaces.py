@@ -78,3 +78,11 @@ class IEmbedder(ABC):
     def embed(self, text: str) -> List[float]:
         """Embed a text into a vector."""
         pass 
+
+class IOCRProcessor(ABC):
+    """Interface for OCR processing."""
+    
+    @abstractmethod
+    def process(self, file_path: str) -> str:
+        """Process a document using OCR."""
+        pass

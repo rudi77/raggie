@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Iterator
 from pathlib import Path, PurePath
 from io import BytesIO
 import base64
@@ -67,14 +67,14 @@ class AdvancedPDFLoader(BasePDFLoader):
         
         return "\n".join(markdown_table)
 
-    def load(self) -> List[Document]:
-        """Load and process the PDF file.
+    # Please look at the BaseLoader. There it is stated that this method shall
+    # be implemented in all the existing subclasses. Do not implement the load method!!!!!!
+    def lazy_load(self) -> Iterator[Document]:
+        """Lazily load and process the PDF file page by page.
         
-        Returns:
-            List of Document objects containing text, tables, and images.
+        Yields:
+            Document objects containing text, tables, and images for each page.
         """
-        documents = []
-        
         try:
             with pdfplumber.open(self.file_path) as pdf:
                 print(f"Processing PDF: {self.file_path}")
@@ -88,17 +88,16 @@ class AdvancedPDFLoader(BasePDFLoader):
                     word_count = len(text_content.split())
                     print(f"Extracted {word_count} words from page {page_num + 1}")
                     
-                    # Initialize metadata with primitive types only
+                    # Initialize metadata
                     file_name_path = Path(self.file_path)
-
                     metadata = {
-                        "source": str(self.source),  # Ensure string
+                        "source": str(self.source),
                         "file_name": file_name_path.name,
-                        "page_number": page_num + 1,  # Integer
+                        "page_number": page_num + 1,
                         "content_type": "text",
-                        "has_tables": False,  # Boolean
-                        "has_images": False,  # Boolean
-                        "image_count": 0  # Integer
+                        "has_tables": False,
+                        "has_images": False,
+                        "image_count": 0
                     }
                     
                     if self.include_tables:
@@ -146,11 +145,10 @@ class AdvancedPDFLoader(BasePDFLoader):
                             metadata["image_count"] = len(processed_images)
                     
                     if text_content.strip():
-                        documents.append(Document(
+                        yield Document(
                             page_content=text_content.strip(),
                             metadata=metadata
-                        ))
-                        print(f"Created document for page {page_num + 1}")
+                        )
                     else:
                         print(f"No content extracted from page {page_num + 1}")
         
@@ -158,9 +156,7 @@ class AdvancedPDFLoader(BasePDFLoader):
             print(f"Error processing PDF {self.file_path}: {str(e)}")
             import traceback
             print(f"Traceback: {traceback.format_exc()}")
-        
-        print(f"\nFinished processing PDF. Extracted {len(documents)} documents.")
-        return documents
+            raise
 
 # Example usage:
 def load_pdf_for_rag(
