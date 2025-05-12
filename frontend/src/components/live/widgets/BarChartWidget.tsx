@@ -84,14 +84,7 @@ export const BarChartWidget: React.FC<BarChartWidgetProps> = ({ data }) => {
             tick={{ fill: theme.palette.text.primary }}
           />
           <YAxis tick={{ fill: theme.palette.text.primary }} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: theme.shape.borderRadius,
-            }}
-            labelStyle={{ color: theme.palette.text.primary }}
-          />
+          <Tooltip />
           <Legend />
           {keys.map((key, index) => (
             <Bar

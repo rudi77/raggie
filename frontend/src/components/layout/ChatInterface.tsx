@@ -1,11 +1,10 @@
 'use client'
 
 import { Paperclip, Mic, Send } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
 import { queryText2Sql, QueryResponse } from '../../services/api'
-import { useTheme } from '../../context/ThemeContext'
 import { SaveTemplateButton } from '../SaveTemplateButton'
 
 interface Message {
@@ -23,7 +22,6 @@ export function ChatInterface() {
   const [loading, setLoading] = useState(false)
   const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { theme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

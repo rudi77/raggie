@@ -1,6 +1,13 @@
 import { EventEmitter } from './events';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5173';
+// Add this at the top of the file or in a separate env.d.ts file
+// declare global {
+//   interface ImportMetaEnv {
+//     readonly VITE_API_URL: string;
+//   }
+// }
+
+const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:9001';
 const BASE_URL = API_URL;
 
 export enum WidgetType {

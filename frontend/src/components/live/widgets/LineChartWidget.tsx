@@ -99,7 +99,7 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
         outline: 'none'
       }
     }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer>
         <LineChart
           data={chartData}
           margin={{
@@ -109,42 +109,18 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
             bottom: 25,
           }}
         >
-          <CartesianGrid 
-            strokeDasharray="3 3" 
-            stroke={theme.palette.divider}
-            vertical={false}
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
           <XAxis
             dataKey={Object.keys(data[0])[0]}
             tick={{ fill: theme.palette.text.primary }}
             stroke={theme.palette.divider}
-            angle={-45}
-            textAnchor="end"
-            height={60}
           />
           <YAxis 
             tick={{ fill: theme.palette.text.primary }}
             stroke={theme.palette.divider}
-            width={60}
           />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: theme.shape.borderRadius,
-              boxShadow: theme.shadows[3],
-              color: theme.palette.text.primary
-            }}
-            labelStyle={{ color: theme.palette.text.primary }}
-            itemStyle={{ color: theme.palette.text.primary }}
-            cursor={{ stroke: theme.palette.divider }}
-          />
-          <Legend 
-            wrapperStyle={{ 
-              paddingTop: '10px',
-              color: theme.palette.text.primary
-            }}
-          />
+          <Tooltip />
+          <Legend />
           {keys.map((key, index) => (
             <Line
               key={key}
@@ -153,11 +129,7 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
               stroke={colors[index]}
               strokeWidth={2}
               dot={false}
-              activeDot={{ 
-                r: 8,
-                stroke: theme.palette.background.paper,
-                strokeWidth: 2
-              }}
+              activeDot={{ r: 8 }}
             />
           ))}
         </LineChart>

@@ -63,15 +63,6 @@ export const PieChartWidget: React.FC<PieChartWidgetProps> = ({ data }) => {
     );
   }
 
-  // Calculate total for percentage display
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
-
-  // Custom tooltip formatter
-  const formatTooltip = (value: number) => {
-    const percentage = ((value / total) * 100).toFixed(1);
-    return `${value} (${percentage}%)`;
-  };
-
   return (
     <Box sx={{ width: '100%', height: '100%', minHeight: 300 }}>
       <ResponsiveContainer>
@@ -86,19 +77,11 @@ export const PieChartWidget: React.FC<PieChartWidgetProps> = ({ data }) => {
             dataKey="value"
             label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
           >
-            {chartData.map((entry, index) => (
+            {chartData.map((_, index) => (
               <Cell key={`cell-${index}`} fill={colors[index]} />
             ))}
           </Pie>
-          <Tooltip
-            formatter={formatTooltip}
-            contentStyle={{
-              backgroundColor: theme.palette.background.paper,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: theme.shape.borderRadius,
-            }}
-            labelStyle={{ color: theme.palette.text.primary }}
-          />
+          <Tooltip />
           <Legend />
         </PieChart>
       </ResponsiveContainer>

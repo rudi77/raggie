@@ -168,15 +168,9 @@ export const LiveTileGrid: React.FC = () => {
       }}
     >
       {Array.from(tiles.values()).map(({ template, data, error, lastUpdate }) => (
-        <Grid 
-          item 
+        <div
           key={template.id}
-          sx={{
-            display: 'flex',
-            '& > *': {
-              width: '100%'
-            }
-          }}
+          style={{ display: 'flex', width: '100%' }}
         >
           <LiveTile
             template={template}
@@ -184,7 +178,7 @@ export const LiveTileGrid: React.FC = () => {
             error={error}
             lastUpdate={lastUpdate}
           />
-        </Grid>
+        </div>
       ))}
     </Grid>
   );

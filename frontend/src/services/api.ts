@@ -1,6 +1,6 @@
 // API service for handling backend requests
 
-const API_BASE_URL = 'http://localhost:9000';
+const API_BASE_URL = 'http://localhost:9001';
 
 export interface QueryResponse {
   sql: string;

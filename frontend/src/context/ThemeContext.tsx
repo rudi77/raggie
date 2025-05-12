@@ -76,8 +76,8 @@ const getTheme = (mode: Theme) => createTheme({
     '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
     '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
     '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
-    // ... rest of the default shadows
-  ],
+    'none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none','none'
+  ] as any,
 })
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

@@ -196,7 +196,7 @@ export class WebSocketService {
     switch (message.type) {
       case 'pong':
         console.log('Received pong message');
-        this.handlePong(message);
+        this.handlePong();
         break;
       case 'live_update':
         console.log('Received live update:', message.data);
@@ -237,7 +237,7 @@ export class WebSocketService {
     }
   }
 
-  private handlePong(message: PongMessage): void {
+  private handlePong(): void {
     this.lastPongTime = Date.now();
     this.missedPongs = 0;
   }

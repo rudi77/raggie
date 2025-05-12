@@ -1,0 +1,2889 @@
+
+// Relative Path: src\components\features\DynamicRenderer.tsx
+
+'use client'
+
+import React, { useEffect, useState } from 'react'
+import * as Babel from '@babel/standalone'
+
+export default function DynamicRenderer() {
+  const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchAndTransform = async () => {
+      try {
+        console.log('Fetching code from backend...')
+        const response = await fetch('/api/generated-code')
+        if (!response.ok) {
+          throw new Error('Failed to fetch code')
+        }
+        
+        const data = await response.json()
+        console.log('Received code:', data.code)
+        
+        // Transform the code using Babel with proper preset configuration
+        console.log('Transforming code with Babel...')
+        const transformed = Babel.transform(data.code, {
+          presets: [Babel.availablePresets['react']],
+          filename: 'dynamic.js',
+          configFile: false,
+          babelrc: false,
+        }).code
+        console.log('Transformed code:', transformed)
+
+        // Create a new function to evaluate the code in the proper context
+        const moduleCode = `
+          const React = arguments[0];
+          const exports = {};
+          ${transformed}
+          return exports.default;
+        `
+        console.log('Executing code with context...')
+        const executeCode = new Function(moduleCode)
+
+        // Execute the code with React in context
+        const Component = executeCode(React)
+        console.log('Component created:', Component)
+        
+        if (typeof Component !== 'function') {
+          throw new Error('Generated code did not return a valid React component')
+        }
+
+        setDynamicComponent(() => Component)
+        setError(null)
+      } catch (err) {
+        console.error('Error in DynamicRenderer:', err)
+        setError(err instanceof Error ? err.message : 'Failed to render component')
+      }
+    }
+
+    fetchAndTransform()
+  }, [])
+
+  if (error) {
+    return (
+      <div className="bg-[#1a2634] rounded-lg p-4">
+        <div className="text-red-500">Error: {error}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-[#1a2634] rounded-lg p-4">
+      {DynamicComponent ? (
+        <DynamicComponent />
+      ) : (
+        <div className="text-secondary">Loading component...</div>
+      )}
+    </div>
+  )
+} 
+
+
+
+// Relative Path: src\components\features\RevenueChart.tsx
+
+'use client'
+
+import { useState, useEffect } from 'react'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
+
+interface RevenueData {
+  month: string
+  revenue: number
+}
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#1a2634] p-3 rounded-lg border border-secondary/20">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-primary text-lg font-bold">
+          €{payload[0].value.toLocaleString('de-DE')}
+        </p>
+      </div>
+    )
+  }
+  return null
+}
+
+export function RevenueChart() {
+  const [data, setData] = useState<RevenueData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/revenue')
+        if (!response.ok) {
+          throw new Error('Failed to fetch revenue data')
+        }
+        const revenueData = await response.json()
+        setData(revenueData)
+        setError(null)
+      } catch (err) {
+        setError('Error loading revenue data')
+        console.error('Error fetching revenue data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <div className="text-secondary">Loading revenue data...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <div className="text-red-500">{error}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full h-[300px] relative">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={data}
+          margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#808080" opacity={0.1} />
+          <XAxis
+            dataKey="month"
+            stroke="#808080"
+            tick={{ fill: '#808080' }}
+            tickLine={{ stroke: '#808080' }}
+          />
+          <YAxis
+            stroke="#808080"
+            tick={{ fill: '#808080' }}
+            tickLine={{ stroke: '#808080' }}
+            tickFormatter={(value) => `€${value}`}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Line
+            type="monotone"
+            dataKey="revenue"
+            stroke="#4285f4"
+            strokeWidth={2}
+            dot={{ fill: '#4285f4', r: 4 }}
+            activeDot={{ r: 6, fill: '#4285f4' }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+} 
+
+
+
+// Relative Path: src\components\features\RevenueView.tsx
+
+'use client'
+
+import { RevenueChart } from './RevenueChart'
+
+export function RevenueView() {
+  return (
+    <div className="w-full px-4 py-4">
+      <h2 className="text-2xl font-bold mb-4">Umsatzentwicklung 2024</h2>
+      
+      <div className="bg-[#1a2634] rounded-lg p-4">
+        <RevenueChart />
+      </div>
+
+      <div className="mt-2 text-right text-secondary text-sm">
+        {new Date().toLocaleTimeString('de-DE', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit' 
+        })}
+      </div>
+    </div>
+  )
+} 
+
+
+
+// Relative Path: src\components\layout\ChatInterface.tsx
+
+'use client'
+
+import { Paperclip, Mic, Send } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import * as Babel from '@babel/standalone'
+import React from 'react'
+import { queryText2Sql, QueryResponse } from '../../services/api'
+import { useTheme } from '../../context/ThemeContext'
+import { SaveTemplateButton } from '../SaveTemplateButton'
+
+interface Message {
+  id: string
+  text: string
+  timestamp: string
+  isUser: boolean
+  showDynamicComponent?: boolean
+  sqlResponse?: QueryResponse
+}
+
+export function ChatInterface() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [inputValue, setInputValue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(false)
+  const { theme } = useTheme()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inputValue.trim()) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: inputValue,
+      timestamp: new Date().toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }),
+      isUser: true,
+    }
+
+    setMessages(prev => [...prev, userMessage])
+    setLoading(true)
+
+    try {
+      // Try to process as SQL query first
+      const sqlResponse = await queryText2Sql({ question: inputValue })
+      const botResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Hier ist das Ergebnis deiner Anfrage:',
+        timestamp: new Date().toLocaleTimeString('de-DE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        isUser: false,
+        sqlResponse
+      }
+      setMessages(prev => [...prev, botResponse])
+    } catch (err) {
+      // If SQL query fails, try revenue visualization
+      const isRevenueQuery =
+        inputValue.toLowerCase().includes('umsatz') ||
+        inputValue.toLowerCase().includes('revenue') ||
+        inputValue.toLowerCase().includes('entwicklung')
+
+      if (isRevenueQuery) {
+        fetch(`http://localhost:8000/api/generated-code?query=${encodeURIComponent(inputValue)}`)
+          .then(res => res.json())
+          .then(({ code }) => {
+            console.log('Fetched code:', code);
+            const transpiled = Babel.transform(code, {
+              presets: [Babel.availablePresets['react']],
+              filename: 'dynamic.js',
+              configFile: false,
+              babelrc: false
+            }).code
+            console.log('Transpiled code:', transpiled);
+
+            const moduleCode = `
+              const React = arguments[0];
+              const exports = {};
+              ${transpiled}
+              return exports.default;
+            `
+            try {
+              const executeCode = new Function(moduleCode)
+              const Component = executeCode(React)
+
+              if (typeof Component !== 'function') {
+                throw new Error('Generated code did not return a valid React component')
+              }
+
+              setDynamicComponent(() => Component)
+
+              const botResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                text: 'Hier ist die angeforderte Umsatzentwicklung:',
+                timestamp: new Date().toLocaleTimeString('de-DE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+                isUser: false,
+                showDynamicComponent: true,
+              }
+
+              setMessages(prev => [...prev, botResponse])
+            } catch (error) {
+              console.error('Error executing code:', error);
+              const errorResponse: Message = {
+                id: (Date.now() + 1).toString(),
+                text: 'Entschuldigung, ich konnte deine Anfrage nicht verarbeiten.',
+                timestamp: new Date().toLocaleTimeString('de-DE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                }),
+                isUser: false,
+              }
+              setMessages(prev => [...prev, errorResponse])
+            }
+          })
+          .catch(err => {
+            console.error('Error fetching or transpiling code:', err)
+            const errorResponse: Message = {
+              id: (Date.now() + 1).toString(),
+              text: 'Entschuldigung, es gab einen Fehler bei der Verarbeitung deiner Anfrage.',
+              timestamp: new Date().toLocaleTimeString('de-DE', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              }),
+              isUser: false,
+            }
+            setMessages(prev => [...prev, errorResponse])
+          })
+      } else {
+        const errorResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'Entschuldigung, ich konnte deine Anfrage nicht verarbeiten.',
+          timestamp: new Date().toLocaleTimeString('de-DE', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+          isUser: false,
+        }
+        setMessages(prev => [...prev, errorResponse])
+      }
+    } finally {
+      setLoading(false)
+      setInputValue('')
+    }
+  }
+
+  const renderSqlResponse = (response: QueryResponse, question: string) => {
+    if (!response || !response.result) return null;
+
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+            <SaveTemplateButton query={response.sql} sourceQuestion={question} />
+          </div>
+          <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
+            <code>{response.sql}</code>
+          </pre>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Results:</h4>
+          {Array.isArray(response.result) && response.result.length > 0 && typeof response.result[0] === 'object' ? (
+            <div className="overflow-x-auto rounded-lg border border-light-border dark:border-dark-border">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-light-border dark:border-dark-border bg-light-background-lighter dark:bg-dark-background-lighter">
+                    {Object.keys(response.result[0]).map(header => (
+                      <th key={header} className="px-4 py-3 text-sm font-medium text-light-text dark:text-dark-text uppercase tracking-wider">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-light-border dark:divide-dark-border">
+                  {response.result.map((row, rowIndex) => (
+                    <tr 
+                      key={rowIndex}
+                      className="bg-light-background-light dark:bg-dark-background-light hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors duration-150 ease-in-out"
+                    >
+                      {Object.values(row).map((value, valueIndex) => (
+                        <td key={valueIndex} className="px-4 py-3 text-sm text-light-text dark:text-dark-text whitespace-nowrap">
+                          {value !== null && value !== undefined ? String(value) : '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
+              {response.formatted_result}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* Backdrop when chat is open */}
+      {!isCollapsed && (
+        <div 
+          className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40"
+          onClick={() => setIsCollapsed(true)}
+        />
+      )}
+      
+      <div className={`fixed left-0 top-16 bottom-0 flex z-50 transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12' : 'w-[600px]'}`}>
+        {/* Toggle Button */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="w-12 flex items-center justify-center bg-light-background-light dark:bg-dark-background-light border-r border-light-border dark:border-dark-border hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
+        >
+          <span className="text-light-text-secondary dark:text-dark-text-secondary text-lg font-medium">
+            {isCollapsed ? '→' : '←'}
+          </span>
+        </button>
+
+        {/* Main Chat Container */}
+        <div className={`flex flex-col flex-1 bg-light-background dark:bg-dark-background border-r border-light-border dark:border-dark-border shadow-lg ${isCollapsed ? 'hidden' : ''}`}>
+          <div className="flex-1 overflow-y-auto">
+            <div className="w-full min-h-full py-6 px-4">
+              {messages.map(message => (
+                <div key={message.id} className="mb-4">
+                  {message.isUser ? (
+                    <div className="flex justify-end">
+                      <div className="max-w-[400px]">
+                        <div className="bg-light-primary dark:bg-dark-primary text-white px-4 py-2 rounded-xl">
+                          {message.text}
+                        </div>
+                        <div className="text-sm text-light-primary dark:text-dark-primary mt-1 text-right">
+                          {message.timestamp}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 rounded-full bg-light-primary dark:bg-dark-primary text-white flex items-center justify-center">
+                          A
+                        </div>
+                        <span className="text-light-text-secondary dark:text-dark-text-secondary">Assistant</span>
+                      </div>
+                      <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
+                        <div className="text-light-text dark:text-dark-text">{message.text}</div>
+                        {message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
+                        {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
+                        <div className="text-sm text-light-primary dark:text-dark-primary text-right">
+                          {message.timestamp}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-light-border dark:border-dark-border bg-light-background dark:bg-dark-background py-4 px-4">
+            <form onSubmit={handleSubmit} className="relative">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                placeholder="Stelle eine Frage oder frage nach Daten..."
+                className="w-full bg-light-background-light dark:bg-dark-background-light rounded-full pl-12 pr-32 py-4 text-light-text dark:text-dark-text placeholder-light-text-secondary dark:placeholder-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-light-primary dark:focus:ring-dark-primary border border-light-border dark:border-dark-border"
+                disabled={loading}
+              />
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center space-x-2">
+                <button type="button" className="text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text dark:hover:text-dark-text transition-colors">
+                  <Paperclip className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-4">
+                <button type="button" className="text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text dark:hover:text-dark-text transition-colors">
+                  <Mic className="w-5 h-5" />
+                </button>
+                <button 
+                  type="submit" 
+                  className="text-light-primary dark:text-dark-primary hover:text-light-primary/90 dark:hover:text-dark-primary/90 transition-colors"
+                  disabled={loading}
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+            </form>
+            <div className="text-xs text-light-text-secondary dark:text-dark-text-secondary mt-2 text-center">
+              Press Enter to send, Shift + Enter for new line
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+} 
+
+
+
+// Relative Path: src\components\layout\Header.tsx
+
+'use client'
+
+import { Sun, Moon } from 'lucide-react'
+import { useTheme } from '../../context/ThemeContext'
+
+export function Header() {
+  const { theme, toggleTheme } = useTheme()
+  
+  const currentTime = new Date().toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+  return (
+    <header className="fixed top-0 left-0 right-0 h-16 bg-light-background-light dark:bg-dark-background border-b border-light-border dark:border-dark-border z-50">
+      <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <h1 className="text-light-primary dark:text-dark-primary text-xl font-medium">iGecko</h1>
+          <span className="text-light-text-secondary dark:text-dark-text-secondary font-bold font-large">| CXO-Dashboard</span>
+        </div>
+        
+        <div className="flex items-center space-x-4">
+          <span className="text-light-primary dark:text-dark-primary text-sm">{currentTime}</span>
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-light-text-secondary dark:text-dark-text-secondary" />
+            ) : (
+              <Moon className="w-4 h-4 text-light-text-secondary dark:text-dark-text-secondary" />
+            )}
+          </button>
+          <div className="px-3 py-1 bg-light-primary/20 dark:bg-dark-primary/20 text-light-primary dark:text-dark-primary text-sm rounded-md">
+            Version 1.0
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+} 
+
+
+
+// Relative Path: src\components\live\widgets\BarChartWidget.tsx
+
+import React, { useMemo } from 'react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { Box, Typography, useTheme } from '@mui/material';
+
+interface BarChartWidgetProps {
+  data: any[];
+}
+
+export const BarChartWidget: React.FC<BarChartWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  // Process data for the chart
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    // Get all keys except the first one (assuming first is x-axis)
+    const keys = Object.keys(data[0]);
+    const xAxisKey = keys[0];
+    const dataKeys = keys.slice(1);
+
+    return data.map(item => {
+      const processedItem: any = {};
+      processedItem[xAxisKey] = item[xAxisKey];
+      
+      dataKeys.forEach(key => {
+        processedItem[key] = typeof item[key] === 'number' ? item[key] : parseFloat(item[key]);
+      });
+      
+      return processedItem;
+    });
+  }, [data]);
+
+  // Generate colors for bars
+  const colors = useMemo(() => {
+    const baseColors = [
+      theme.palette.primary.main,
+      theme.palette.secondary.main,
+      theme.palette.error.main,
+      theme.palette.warning.main,
+      theme.palette.info.main,
+      theme.palette.success.main
+    ];
+    
+    const keys = Object.keys(data[0] || {}).slice(1);
+    return keys.map((_, index) => baseColors[index % baseColors.length]);
+  }, [data, theme]);
+
+  if (!data || data.length === 0) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+        <Typography color="textSecondary">
+          No data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  const keys = Object.keys(data[0]).slice(1);
+
+  return (
+    <Box sx={{ width: '100%', height: '100%', minHeight: 300 }}>
+      <ResponsiveContainer>
+        <BarChart
+          data={chartData}
+          margin={{
+            top: 5,
+            right: 30,
+            left: 20,
+            bottom: 5,
+          }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            dataKey={Object.keys(data[0])[0]}
+            tick={{ fill: theme.palette.text.primary }}
+          />
+          <YAxis tick={{ fill: theme.palette.text.primary }} />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: theme.shape.borderRadius,
+            }}
+            labelStyle={{ color: theme.palette.text.primary }}
+          />
+          <Legend />
+          {keys.map((key, index) => (
+            <Bar
+              key={key}
+              dataKey={key}
+              fill={colors[index]}
+              radius={[4, 4, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\widgets\LineChartWidget.tsx
+
+import React, { useMemo } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { Box, Typography, useTheme } from '@mui/material';
+
+interface LineChartWidgetProps {
+  data: any[];
+}
+
+export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  // Process data for the chart
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    // Get all keys except the first one (assuming first is x-axis)
+    const keys = Object.keys(data[0]);
+    const xAxisKey = keys[0];
+    const dataKeys = keys.slice(1);
+
+    return data.map(item => {
+      const processedItem: any = {};
+      processedItem[xAxisKey] = item[xAxisKey];
+      
+      dataKeys.forEach(key => {
+        processedItem[key] = typeof item[key] === 'number' ? item[key] : parseFloat(item[key]);
+      });
+      
+      return processedItem;
+    });
+  }, [data]);
+
+  // Generate colors for lines
+  const colors = useMemo(() => {
+    const baseColors = [
+      theme.palette.primary.main,
+      theme.palette.secondary.main,
+      theme.palette.error.main,
+      theme.palette.warning.main,
+      theme.palette.info.main,
+      theme.palette.success.main
+    ];
+    
+    const keys = Object.keys(data[0] || {}).slice(1);
+    return keys.map((_, index) => baseColors[index % baseColors.length]);
+  }, [data, theme]);
+
+  if (!data || data.length === 0) {
+    return (
+      <Box 
+        display="flex" 
+        justifyContent="center" 
+        alignItems="center" 
+        height="100%"
+        width="100%"
+        minWidth="500px"
+      >
+        <Typography color="textSecondary">
+          No data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  const keys = Object.keys(data[0]).slice(1);
+
+  return (
+    <Box sx={{ 
+      width: '100%', 
+      height: '100%', 
+      minWidth: '500px',
+      backgroundColor: theme.palette.background.paper,
+      borderRadius: theme.shape.borderRadius,
+      boxShadow: theme.shadows[2],
+      p: 2,
+      '& .recharts-responsive-container': {
+        minWidth: '500px !important',
+        width: '100% !important'
+      },
+      '& .recharts-cartesian-grid-horizontal line, & .recharts-cartesian-grid-vertical line': {
+        stroke: theme.palette.divider
+      },
+      '& .recharts-text': {
+        fill: theme.palette.text.primary
+      },
+      '& .recharts-legend-item-text': {
+        color: `${theme.palette.text.primary} !important`
+      },
+      '& .recharts-tooltip-wrapper': {
+        outline: 'none'
+      }
+    }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={chartData}
+          margin={{
+            top: 5,
+            right: 30,
+            left: 20,
+            bottom: 25,
+          }}
+        >
+          <CartesianGrid 
+            strokeDasharray="3 3" 
+            stroke={theme.palette.divider}
+            vertical={false}
+          />
+          <XAxis
+            dataKey={Object.keys(data[0])[0]}
+            tick={{ fill: theme.palette.text.primary }}
+            stroke={theme.palette.divider}
+            angle={-45}
+            textAnchor="end"
+            height={60}
+          />
+          <YAxis 
+            tick={{ fill: theme.palette.text.primary }}
+            stroke={theme.palette.divider}
+            width={60}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: theme.shape.borderRadius,
+              boxShadow: theme.shadows[3],
+              color: theme.palette.text.primary
+            }}
+            labelStyle={{ color: theme.palette.text.primary }}
+            itemStyle={{ color: theme.palette.text.primary }}
+            cursor={{ stroke: theme.palette.divider }}
+          />
+          <Legend 
+            wrapperStyle={{ 
+              paddingTop: '10px',
+              color: theme.palette.text.primary
+            }}
+          />
+          {keys.map((key, index) => (
+            <Line
+              key={key}
+              type="monotone"
+              dataKey={key}
+              stroke={colors[index]}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ 
+                r: 8,
+                stroke: theme.palette.background.paper,
+                strokeWidth: 2
+              }}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\widgets\NumberWidget.tsx
+
+import React from 'react';
+import { Box, Typography, useTheme } from '@mui/material';
+
+interface NumberWidgetProps {
+  data: number | string | Array<number | string | Record<string, number | string>>;
+}
+
+export const NumberWidget: React.FC<NumberWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  // Extract the numeric value from the data
+  const value = React.useMemo(() => {
+    if (!data || (Array.isArray(data) && data.length === 0)) return null;
+    
+    // If data is an array, take the first value
+    if (Array.isArray(data)) {
+      const firstRow = data[0];
+      // If the row is an object, take the first numeric value
+      if (typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+        const firstValue = Object.values(firstRow)[0];
+        return typeof firstValue === 'number' ? firstValue : Number(firstValue);
+      }
+      return typeof firstRow === 'number' ? firstRow : Number(firstRow);
+    }
+    
+    // If data is a single value
+    return typeof data === 'number' ? data : Number(data);
+  }, [data]);
+
+  if (value === null || isNaN(value)) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+        <Typography color="textSecondary">
+          No data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Format the number with appropriate precision
+  const formattedValue = React.useMemo(() => {
+    if (Number.isInteger(value)) {
+      return value.toLocaleString();
+    }
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }, [value]);
+
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      justifyContent="center"
+      alignItems="center"
+      height="100%"
+      minHeight={200}
+    >
+      <Typography
+        variant="h2"
+        component="div"
+        sx={{
+          color: theme.palette.primary.main,
+          fontWeight: 'bold',
+          textAlign: 'center'
+        }}
+      >
+        {formattedValue}
+      </Typography>
+    </Box>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\widgets\PieChartWidget.tsx
+
+import React, { useMemo } from 'react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { Box, Typography, useTheme } from '@mui/material';
+
+interface PieChartWidgetProps {
+  data: any[];
+}
+
+export const PieChartWidget: React.FC<PieChartWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  // Process data for the chart
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    // For pie chart, we expect data in format [{name: string, value: number}]
+    // If data is not in this format, we'll try to convert it
+    if (data[0].hasOwnProperty('name') && data[0].hasOwnProperty('value')) {
+      return data;
+    }
+
+    // Try to convert from other formats
+    const keys = Object.keys(data[0]);
+    if (keys.length >= 2) {
+      // Use first key as name, second as value
+      return data.map(item => ({
+        name: String(item[keys[0]]),
+        value: typeof item[keys[1]] === 'number' ? item[keys[1]] : parseFloat(item[keys[1]])
+      }));
+    }
+
+    return [];
+  }, [data]);
+
+  // Generate colors for pie segments
+  const colors = useMemo(() => {
+    const baseColors = [
+      theme.palette.primary.main,
+      theme.palette.secondary.main,
+      theme.palette.error.main,
+      theme.palette.warning.main,
+      theme.palette.info.main,
+      theme.palette.success.main
+    ];
+    
+    return chartData.map((_, index) => baseColors[index % baseColors.length]);
+  }, [chartData, theme]);
+
+  if (!data || data.length === 0 || chartData.length === 0) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+        <Typography color="textSecondary">
+          No data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Calculate total for percentage display
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
+
+  // Custom tooltip formatter
+  const formatTooltip = (value: number) => {
+    const percentage = ((value / total) * 100).toFixed(1);
+    return `${value} (${percentage}%)`;
+  };
+
+  return (
+    <Box sx={{ width: '100%', height: '100%', minHeight: 300 }}>
+      <ResponsiveContainer>
+        <PieChart>
+          <Pie
+            data={chartData}
+            cx="50%"
+            cy="50%"
+            labelLine={false}
+            outerRadius={80}
+            fill="#8884d8"
+            dataKey="value"
+            label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={colors[index]} />
+            ))}
+          </Pie>
+          <Tooltip
+            formatter={formatTooltip}
+            contentStyle={{
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: theme.shape.borderRadius,
+            }}
+            labelStyle={{ color: theme.palette.text.primary }}
+          />
+          <Legend />
+        </PieChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\widgets\TableWidget.tsx
+
+import React from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  useTheme,
+  Box,
+  alpha
+} from '@mui/material';
+
+interface TableWidgetProps {
+  data: any[];
+}
+
+export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  if (!data || data.length === 0) {
+    return (
+      <Typography color="textSecondary" align="center">
+        Keine Daten verfügbar
+      </Typography>
+    );
+  }
+
+  // Get column names from the first row
+  const columns = Object.keys(data[0]);
+  
+  // Calculate column width based on available space
+  const columnWidth = '150px'; // Fixed column width
+
+  return (
+    <Box sx={{
+      width: '100%',
+      height: '100%',
+      maxWidth: '500px', // Match the LineChart width
+      margin: '0 auto', // Center the table
+    }}>
+      <TableContainer 
+        component={Paper} 
+        sx={{ 
+          height: '100%',
+          width: '100%',
+          backgroundColor: theme.palette.background.paper,
+          overflow: 'auto',
+          borderRadius: '2px',
+          boxShadow: 'none',
+          border: `1px solid ${theme.palette.divider}`,
+          '& .MuiTableCell-root': {
+            borderColor: theme.palette.divider,
+            whiteSpace: 'nowrap', // Prevent text wrapping
+            padding: '6px 12px', // Reduced padding
+            color: theme.palette.text.primary,
+            '&:first-of-type': {
+              position: 'sticky',
+              left: 0,
+              backgroundColor: theme.palette.background.paper,
+              zIndex: 2,
+              borderRight: `1px solid ${theme.palette.divider}`
+            }
+          },
+          '& .MuiTable-root': {
+            width: 'max-content', // Allow table to be wider than container
+            minWidth: '100%'
+          },
+          // Custom scrollbar styling
+          '&::-webkit-scrollbar': {
+            height: '8px',
+            width: '8px'
+          },
+          '&::-webkit-scrollbar-track': {
+            background: theme.palette.mode === 'dark' 
+              ? theme.palette.grey[800] 
+              : theme.palette.grey[200]
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: theme.palette.mode === 'dark'
+              ? theme.palette.grey[600]
+              : theme.palette.grey[400],
+            borderRadius: '2px',
+            '&:hover': {
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[500]
+                : theme.palette.grey[500]
+            }
+          }
+        }}
+      >
+        <Table size="small" stickyHeader>
+          <TableHead>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell 
+                  key={column}
+                  sx={{
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.2)
+                      : alpha(theme.palette.primary.main, 0.1),
+                    color: theme.palette.text.primary,
+                    fontWeight: 600,
+                    width: columnWidth,
+                    minWidth: columnWidth,
+                    maxWidth: columnWidth,
+                    fontSize: '0.875rem',
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    borderBottom: `2px solid ${theme.palette.divider}`,
+                    '&:first-of-type': {
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.2)
+                        : alpha(theme.palette.primary.main, 0.1),
+                      zIndex: 3 // Above sticky column cells
+                    }
+                  }}
+                >
+                  {column}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {data.map((row, rowIndex) => (
+              <TableRow 
+                key={rowIndex}
+                sx={{
+                  '&:nth-of-type(odd)': {
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.05)
+                      : alpha(theme.palette.primary.main, 0.02),
+                    '& .MuiTableCell-root:first-of-type': {
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.05)
+                        : alpha(theme.palette.primary.main, 0.02)
+                    }
+                  },
+                  '&:hover': {
+                    backgroundColor: theme.palette.mode === 'dark'
+                      ? alpha(theme.palette.primary.main, 0.1)
+                      : alpha(theme.palette.primary.main, 0.05),
+                    '& .MuiTableCell-root:first-of-type': {
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.primary.main, 0.05)
+                    }
+                  }
+                }}
+              >
+                {columns.map((column) => (
+                  <TableCell 
+                    key={`${rowIndex}-${column}`}
+                    sx={{
+                      width: columnWidth,
+                      minWidth: columnWidth,
+                      maxWidth: columnWidth,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {formatCellValue(row[column])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
+const formatCellValue = (value: any): string => {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+
+  if (typeof value === 'number') {
+    // Format numbers with appropriate precision and locale
+    return new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(value);
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Ja' : 'Nein';
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleString('de-DE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // Try to parse date strings
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    try {
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleString('de-DE', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    } catch {
+      // If parsing fails, return the original string
+    }
+  }
+
+  return String(value);
+}; 
+
+
+
+// Relative Path: src\components\live\widgets\TextWidget.tsx
+
+import React from 'react';
+import { Box, Typography, useTheme } from '@mui/material';
+
+interface TextWidgetProps {
+  data: string | Array<string | Record<string, string>>;
+}
+
+export const TextWidget: React.FC<TextWidgetProps> = ({ data }) => {
+  const theme = useTheme();
+
+  // Extract the text value from the data
+  const text = React.useMemo(() => {
+    if (!data || (Array.isArray(data) && data.length === 0)) return null;
+    
+    // If data is an array, take the first value
+    if (Array.isArray(data)) {
+      const firstRow = data[0];
+      // If the row is an object, take the first string value
+      if (typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+        return String(Object.values(firstRow)[0]);
+      }
+      return String(firstRow);
+    }
+    
+    // If data is a single value
+    return String(data);
+  }, [data]);
+
+  if (!text) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+        <Typography color="textSecondary">
+          No data available
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      justifyContent="center"
+      alignItems="center"
+      height="100%"
+      minHeight={200}
+      p={2}
+    >
+      <Typography
+        variant="body1"
+        component="div"
+        sx={{
+          color: theme.palette.text.primary,
+          textAlign: 'center',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word'
+        }}
+      >
+        {text}
+      </Typography>
+    </Box>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\LiveTile.tsx
+
+import React from 'react';
+import { SQLTemplate, WidgetType } from '../../services/template.service';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  IconButton,
+  Typography,
+  Box,
+  Tooltip,
+  CircularProgress,
+  Alert
+} from '@mui/material';
+import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { formatDistanceToNow } from 'date-fns';
+import { TableWidget } from './widgets/TableWidget';
+import { LineChartWidget } from './widgets/LineChartWidget';
+import { BarChartWidget } from './widgets/BarChartWidget';
+import { PieChartWidget } from './widgets/PieChartWidget';
+import { NumberWidget } from './widgets/NumberWidget';
+import { TextWidget } from './widgets/TextWidget';
+import { useTheme } from '@mui/material/styles';
+
+interface LiveTileProps {
+  template: SQLTemplate;
+  data: any;
+  error?: string;
+  lastUpdate: string;
+}
+
+const getWidgetComponent = (widgetType: WidgetType, data: any) => {
+  switch (widgetType) {
+    case WidgetType.TABLE:
+      return <TableWidget data={data} />;
+    case WidgetType.LINE_CHART:
+      return <LineChartWidget data={data} />;
+    case WidgetType.BAR_CHART:
+      return <BarChartWidget data={data} />;
+    case WidgetType.PIE_CHART:
+      return <PieChartWidget data={data} />;
+    case WidgetType.NUMBER:
+      return <NumberWidget data={data} />;
+    case WidgetType.TEXT:
+      return <TextWidget data={data} />;
+    default:
+      return (
+        <Typography color="error">
+          Unsupported widget type: {widgetType}
+        </Typography>
+      );
+  }
+};
+
+export const LiveTile: React.FC<LiveTileProps> = ({
+  template,
+  data,
+  error,
+  lastUpdate
+}) => {
+  const handleRefresh = () => {
+    // TODO: Implement manual refresh
+    console.log('Manual refresh requested for template:', template.id);
+  };
+
+  const theme = useTheme();
+
+  return (
+    <Card sx={{ 
+      height: '400px', // Fixed height for all tiles
+      width: '100%', // Take full width of grid item
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden', // Prevent content from expanding the card
+      minWidth: '500px', // Minimum width based on LineChart
+      borderRadius: '2px', // Reduce outer border radius
+      '& .MuiPaper-root': {
+        borderRadius: '2px', // Consistent border radius for inner elements
+      }
+    }}>
+      <CardHeader
+        sx={{
+          p: 1.5, // Reduced padding
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          '& .MuiCardHeader-content': {
+            overflow: 'hidden', // Prevent title from expanding
+            minWidth: 0 // Allow text to truncate
+          },
+          '& .MuiCardHeader-title': {
+            fontSize: '1rem',
+            fontWeight: 500,
+            lineHeight: 1.2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            height: '2.4em' // Fixed height for 2 lines
+          }
+        }}
+        title={template.source_question}
+        action={
+          <Tooltip title="Refresh data">
+            <IconButton onClick={handleRefresh} size="small">
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        }
+        subheader={
+          <Typography variant="caption" color="textSecondary">
+            Updated {formatDistanceToNow(new Date(lastUpdate))} ago
+          </Typography>
+        }
+      />
+      <CardContent sx={{ 
+        flexGrow: 1, 
+        position: 'relative',
+        height: 'calc(100% - 85px)', // Subtract header height
+        p: 1, // Reduced padding
+        overflow: 'hidden', // Hide overflow at container level
+        '&:last-child': {
+          pb: 1 // Override default padding bottom
+        }
+      }}>
+        {error ? (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {error}
+          </Alert>
+        ) : data === null ? (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            height="100%"
+          >
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Box sx={{ 
+            height: '100%',
+            width: '100%',
+            overflow: 'auto', // Enable both scrollbars
+            '& > *': { // Apply to all widget components
+              height: '100%',
+              width: '100%',
+              minWidth: '500px', // Consistent minimum width for all widgets
+            },
+            // Custom scrollbar styling
+            '&::-webkit-scrollbar': {
+              width: '8px',
+              height: '8px'
+            },
+            '&::-webkit-scrollbar-track': {
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[800]
+                : theme.palette.grey[200]
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: theme.palette.mode === 'dark'
+                ? theme.palette.grey[600]
+                : theme.palette.grey[400],
+              borderRadius: '2px',
+              '&:hover': {
+                background: theme.palette.mode === 'dark'
+                  ? theme.palette.grey[500]
+                  : theme.palette.grey[500]
+              }
+            }
+          }}>
+            {getWidgetComponent(template.widget_type, data)}
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+}; 
+
+
+
+// Relative Path: src\components\live\LiveTileGrid.tsx
+
+import React, { useEffect, useState } from 'react';
+import { templateService, SQLTemplate } from '../../services/template.service';
+import { websocketService, LiveUpdate } from '../../services/websocket.service';
+import { LiveTile } from './LiveTile';
+import { Alert, AlertTitle, Box, CircularProgress, Grid, Typography } from '@mui/material';
+
+interface TileData {
+  template: SQLTemplate;
+  data: any;
+  error?: string;
+  lastUpdate: string;
+}
+
+export const LiveTileGrid: React.FC = () => {
+  const [tiles, setTiles] = useState<Map<number, TileData>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load templates and connect to WebSocket
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        await templateService.fetchTemplates();
+        const templates = templateService.getAllTemplates();
+        
+        // Initialize tiles with templates
+        const initialTiles = new Map<number, TileData>();
+        templates.forEach(template => {
+          initialTiles.set(template.id, {
+            template,
+            data: null,
+            lastUpdate: template.last_execution || new Date().toISOString()
+          });
+        });
+        
+        setTiles(initialTiles);
+        setIsLoading(false);
+      } catch (err) {
+        setError('Failed to load templates');
+        setIsLoading(false);
+      }
+    };
+
+    loadTemplates();
+    websocketService.connect();
+
+    // Cleanup - properly disconnect when component unmounts
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []);
+
+  // Handle live updates
+  useEffect(() => {
+    const handleLiveUpdate = (update: LiveUpdate) => {
+      if (!update || !update.template_id) {
+        console.warn('Received invalid live update:', update);
+        return;
+      }
+
+      setTiles(prevTiles => {
+        const newTiles = new Map(prevTiles);
+        const tile = newTiles.get(update.template_id);
+        
+        if (tile) {
+          newTiles.set(update.template_id, {
+            ...tile,
+            data: update.data?.result || null,
+            error: update.error,
+            lastUpdate: update.timestamp || new Date().toISOString()
+          });
+        } else {
+          console.warn(`Received update for unknown template ID: ${update.template_id}`);
+        }
+        
+        return newTiles;
+      });
+    };
+
+    websocketService.onLiveUpdate(handleLiveUpdate);
+
+    return () => {
+      websocketService.offLiveUpdate(handleLiveUpdate);
+    };
+  }, []);
+
+  // Handle template updates
+  useEffect(() => {
+    const handleTemplatesUpdated = (templates: SQLTemplate[]) => {
+      setTiles(prevTiles => {
+        const newTiles = new Map(prevTiles);
+        
+        templates.forEach(template => {
+          if (!newTiles.has(template.id)) {
+            newTiles.set(template.id, {
+              template,
+              data: null,
+              lastUpdate: template.last_execution || new Date().toISOString()
+            });
+          }
+        });
+        
+        return newTiles;
+      });
+    };
+
+    const handleTemplateDeleted = (id: number) => {
+      setTiles(prevTiles => {
+        const newTiles = new Map(prevTiles);
+        newTiles.delete(id);
+        return newTiles;
+      });
+    };
+
+    templateService.onTemplatesUpdated(handleTemplatesUpdated);
+    templateService.onTemplateDeleted(handleTemplateDeleted);
+
+    return () => {
+      templateService.offTemplatesUpdated(handleTemplatesUpdated);
+      templateService.offTemplateDeleted(handleTemplateDeleted);
+    };
+  }, []);
+
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ mt: 2 }}>
+        <AlertTitle>Error</AlertTitle>
+        {error}
+      </Alert>
+    );
+  }
+
+  if (tiles.size === 0) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Typography variant="h6" color="textSecondary">
+          No live tiles available. Create a template to get started.
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Grid 
+      container 
+      spacing={3} 
+      sx={{ 
+        p: 3,
+        width: '100%',
+        margin: 0,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(500px, 1fr))',
+        gap: '24px',
+        '& .MuiGrid-item': {
+          padding: 0,
+          width: '100%',
+          maxWidth: '100%',
+          flexBasis: '100%'
+        }
+      }}
+    >
+      {Array.from(tiles.values()).map(({ template, data, error, lastUpdate }) => (
+        <Grid 
+          item 
+          key={template.id}
+          sx={{
+            display: 'flex',
+            '& > *': {
+              width: '100%'
+            }
+          }}
+        >
+          <LiveTile
+            template={template}
+            data={data}
+            error={error}
+            lastUpdate={lastUpdate}
+          />
+        </Grid>
+      ))}
+    </Grid>
+  );
+}; 
+
+
+
+// Relative Path: src\components\SaveTemplateButton.tsx
+
+import React, { useState } from 'react';
+import {
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Stack
+} from '@mui/material';
+import { WidgetType } from '../services/template.service';
+import { templateService } from '../services/template.service';
+import SaveIcon from '@mui/icons-material/Save';
+
+interface SaveTemplateButtonProps {
+  query: string;
+  sourceQuestion: string;
+}
+
+export const SaveTemplateButton: React.FC<SaveTemplateButtonProps> = ({ query, sourceQuestion }) => {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [widgetType, setWidgetType] = useState<WidgetType>(WidgetType.TABLE);
+  const [refreshRate, setRefreshRate] = useState(0);
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+
+  const handleSave = async () => {
+    try {
+      await templateService.createTemplate({
+        name,
+        description,
+        query,
+        source_question: sourceQuestion,
+        widget_type: widgetType,
+        refresh_rate: refreshRate
+      });
+      handleClose();
+    } catch (error) {
+      console.error('Error saving template:', error);
+      // TODO: Add error handling/notification
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<SaveIcon />}
+        onClick={handleOpen}
+        size="small"
+      >
+        Als Template speichern
+      </Button>
+
+      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Template speichern</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 2 }}>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              required
+            />
+            <TextField
+              label="Beschreibung"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              fullWidth
+              multiline
+              rows={2}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Widget Typ</InputLabel>
+              <Select
+                value={widgetType}
+                label="Widget Typ"
+                onChange={(e) => setWidgetType(e.target.value as WidgetType)}
+              >
+                <MenuItem value={WidgetType.TABLE}>Tabelle</MenuItem>
+                <MenuItem value={WidgetType.LINE_CHART}>Liniendiagramm</MenuItem>
+                <MenuItem value={WidgetType.BAR_CHART}>Balkendiagramm</MenuItem>
+                <MenuItem value={WidgetType.PIE_CHART}>Kreisdiagramm</MenuItem>
+                <MenuItem value={WidgetType.NUMBER}>Zahl</MenuItem>
+                <MenuItem value={WidgetType.TEXT}>Text</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Aktualisierungsintervall (Sekunden)"
+              type="number"
+              value={refreshRate}
+              onChange={(e) => setRefreshRate(parseInt(e.target.value) || 0)}
+              fullWidth
+              InputProps={{ inputProps: { min: 0 } }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Abbrechen</Button>
+          <Button onClick={handleSave} variant="contained" disabled={!name}>
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}; 
+
+
+
+// Relative Path: src\components\Text2SqlQuery.tsx
+
+import { useState } from 'react';
+import { queryText2Sql, QueryResponse } from '../services/api';
+
+export function Text2SqlQuery() {
+  const [question, setQuestion] = useState('');
+  const [response, setResponse] = useState<QueryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!question.trim()) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await queryText2Sql({ question });
+      setResponse(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to render the result as a table if it's an array of objects
+  const renderResultTable = () => {
+    if (!response || !response.result) return null;
+
+    // Check if result is an array of objects
+    if (Array.isArray(response.result) && response.result.length > 0 && typeof response.result[0] === 'object') {
+      const headers = Object.keys(response.result[0]);
+
+      return (
+        <div className="overflow-x-auto mt-4">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-700 text-gray-200">
+                {headers.map((header) => (
+                  <th key={header} className="px-4 py-2 border border-gray-600">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {response.result.map((row, rowIndex) => (
+                <tr key={rowIndex} className="bg-gray-800 text-gray-300">
+                  {headers.map((header) => (
+                    <td key={`${rowIndex}-${header}`} className="px-4 py-2 border border-gray-600">
+                      {row[header] !== null && row[header] !== undefined ? String(row[header]) : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // If not an array of objects, just display the formatted result
+    return (
+      <div className="mt-4 p-4 bg-gray-800 rounded-md text-gray-300">
+        <pre className="whitespace-pre-wrap">{response.formatted_result}</pre>
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <h2 className="text-2xl font-bold mb-6 text-white">SQL Query Assistant</h2>
+      
+      <form onSubmit={handleSubmit} className="mb-6">
+        <div className="flex flex-col space-y-4">
+          <div>
+            <label htmlFor="question" className="block text-sm font-medium text-gray-300 mb-2">
+              Ask your question
+            </label>
+            <textarea
+              id="question"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="e.g., Show me the total sales by product category"
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {loading ? 'Processing...' : 'Submit Query'}
+          </button>
+        </div>
+      </form>
+
+      {error && (
+        <div className="p-4 mb-4 bg-red-900 text-red-200 rounded-md">
+          <p className="font-medium">Error:</p>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {response && (
+        <div className="mt-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-white mb-2">Generated SQL:</h3>
+            <pre className="p-4 bg-gray-800 rounded-md text-gray-300 overflow-x-auto">
+              <code>{response.sql}</code>
+            </pre>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-medium text-white mb-2">Results:</h3>
+            {renderResultTable()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+} 
+
+
+
+// Relative Path: src\context\ThemeContext.tsx
+
+'use client'
+
+import { createContext, useContext, useEffect, useState } from 'react'
+import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material'
+
+type Theme = 'dark' | 'light'
+
+interface ThemeContextType {
+  theme: Theme
+  toggleTheme: () => void
+}
+
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+
+// MUI theme configuration
+const getTheme = (mode: Theme) => createTheme({
+  palette: {
+    mode,
+    ...(mode === 'dark' ? {
+      primary: {
+        main: '#3B82F6',
+      },
+      background: {
+        default: '#0F172A',
+        paper: '#1E293B',
+      },
+      text: {
+        primary: '#F8FAFC',
+        secondary: '#94A3B8',
+      },
+      divider: '#1E293B',
+      grey: {
+        100: '#1E293B',
+        200: '#334155',
+        300: '#475569',
+        400: '#64748B',
+        500: '#94A3B8',
+        600: '#CBD5E1',
+        700: '#E2E8F0',
+        800: '#F1F5F9',
+        900: '#F8FAFC',
+      },
+    } : {
+      primary: {
+        main: '#3B82F6',
+      },
+      background: {
+        default: '#F1F5F9',
+        paper: '#FFFFFF',
+      },
+      text: {
+        primary: '#0F172A',
+        secondary: '#64748B',
+      },
+      divider: '#E2E8F0',
+      grey: {
+        100: '#F8FAFC',
+        200: '#F1F5F9',
+        300: '#E2E8F0',
+        400: '#CBD5E1',
+        500: '#94A3B8',
+        600: '#64748B',
+        700: '#475569',
+        800: '#334155',
+        900: '#1E293B',
+      },
+    }),
+  },
+  shape: {
+    borderRadius: 8,
+  },
+  shadows: [
+    'none',
+    '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+    '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+    '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+    // ... rest of the default shadows
+  ],
+})
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>('dark')
+  const muiTheme = getTheme(theme)
+
+  useEffect(() => {
+    // Check for saved theme preference or system preference
+    const savedTheme = localStorage.getItem('theme') as Theme
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    const initialTheme = savedTheme || systemTheme
+    
+    setTheme(initialTheme)
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark')
+  }, [])
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(newTheme)
+    localStorage.setItem('theme', newTheme)
+    document.documentElement.classList.toggle('dark', newTheme === 'dark')
+  }
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      <MUIThemeProvider theme={muiTheme}>
+        {children}
+      </MUIThemeProvider>
+    </ThemeContext.Provider>
+  )
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext)
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider')
+  }
+  return context
+} 
+
+
+
+// Relative Path: src\services\api.ts
+
+// API service for handling backend requests
+
+const API_BASE_URL = 'http://localhost:9000';
+
+export interface QueryResponse {
+  sql: string;
+  result: any;
+  formatted_result: string;
+}
+
+export interface QueryRequest {
+  question: string;
+}
+
+/**
+ * Sends a question to the text2sql API and returns the response
+ */
+export async function queryText2Sql(request: QueryRequest): Promise<QueryResponse> {
+  const response = await fetch(`${API_BASE_URL}/text2sql/query`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Failed to process query');
+  }
+
+  return response.json();
+}
+
+/**
+ * Gets an explanation of the SQL that would be generated for a question
+ */
+export async function explainText2Sql(request: QueryRequest): Promise<{ sql: string }> {
+  const response = await fetch(`${API_BASE_URL}/text2sql/explain`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Failed to explain query');
+  }
+
+  return response.json();
+} 
+
+
+
+// Relative Path: src\services\events.ts
+
+// Simple EventEmitter implementation for browser
+export class EventEmitter {
+  private listeners: { [event: string]: Function[] } = {};
+
+  on(event: string, callback: Function): void {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event].push(callback);
+  }
+
+  off(event: string, callback: Function): void {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+  }
+
+  emit(event: string, ...args: any[]): void {
+    if (!this.listeners[event]) return;
+    this.listeners[event].forEach(callback => callback(...args));
+  }
+} 
+
+
+
+// Relative Path: src\services\template.service.ts
+
+import { EventEmitter } from './events';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5173';
+const BASE_URL = API_URL;
+
+export enum WidgetType {
+  TABLE = 'TABLE',
+  LINE_CHART = 'LINE_CHART',
+  BAR_CHART = 'BAR_CHART',
+  PIE_CHART = 'PIE_CHART',
+  NUMBER = 'NUMBER',
+  TEXT = 'TEXT'
+}
+
+export interface SQLTemplate {
+  id: number;
+  name: string;
+  description?: string;
+  query: string;
+  source_question: string;
+  widget_type: WidgetType;
+  refresh_rate: number;
+  created_at: string;
+  updated_at?: string;
+  last_execution?: string;
+}
+
+export interface TemplateCreate {
+  name: string;
+  description?: string;
+  query: string;
+  source_question: string;
+  widget_type: WidgetType;
+  refresh_rate: number;
+}
+
+class TemplateService {
+  private static instance: TemplateService;
+  private templates: Map<number, SQLTemplate> = new Map();
+  private eventEmitter = new EventEmitter();
+  private isLoading = false;
+
+  private constructor() {
+    // Private constructor for singleton pattern
+  }
+
+  public static getInstance(): TemplateService {
+    if (!TemplateService.instance) {
+      TemplateService.instance = new TemplateService();
+    }
+    return TemplateService.instance;
+  }
+
+  public getAllTemplates(): SQLTemplate[] {
+    return Array.from(this.templates.values());
+  }
+
+  public getTemplate(id: number): SQLTemplate | undefined {
+    return this.templates.get(id);
+  }
+
+  public async fetchTemplates(): Promise<void> {
+    if (this.isLoading) return;
+    
+    try {
+      this.isLoading = true;
+      const response = await fetch(`${BASE_URL}/api/templates/`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const templates: SQLTemplate[] = await response.json();
+      
+      // Update cache
+      this.templates.clear();
+      templates.forEach(template => {
+        this.templates.set(template.id, template);
+      });
+      
+      this.eventEmitter.emit('templates_updated', Array.from(this.templates.values()));
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      this.eventEmitter.emit('error', error);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  public async createTemplate(template: TemplateCreate): Promise<SQLTemplate> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/templates/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(template),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const newTemplate: SQLTemplate = await response.json();
+      this.templates.set(newTemplate.id, newTemplate);
+      this.eventEmitter.emit('template_created', newTemplate);
+      return newTemplate;
+    } catch (error) {
+      console.error('Error creating template:', error);
+      this.eventEmitter.emit('error', error);
+      throw error;
+    }
+  }
+
+  public async updateTemplate(id: number, template: Partial<TemplateCreate>): Promise<SQLTemplate> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(template),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const updatedTemplate: SQLTemplate = await response.json();
+      this.templates.set(updatedTemplate.id, updatedTemplate);
+      this.eventEmitter.emit('template_updated', updatedTemplate);
+      return updatedTemplate;
+    } catch (error) {
+      console.error('Error updating template:', error);
+      this.eventEmitter.emit('error', error);
+      throw error;
+    }
+  }
+
+  public async deleteTemplate(id: number): Promise<void> {
+    try {
+      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      this.templates.delete(id);
+      this.eventEmitter.emit('template_deleted', id);
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      this.eventEmitter.emit('error', error);
+      throw error;
+    }
+  }
+
+  public onTemplatesUpdated(callback: (templates: SQLTemplate[]) => void): void {
+    this.eventEmitter.on('templates_updated', callback);
+  }
+
+  public onTemplateCreated(callback: (template: SQLTemplate) => void): void {
+    this.eventEmitter.on('template_created', callback);
+  }
+
+  public onTemplateUpdated(callback: (template: SQLTemplate) => void): void {
+    this.eventEmitter.on('template_updated', callback);
+  }
+
+  public onTemplateDeleted(callback: (id: number) => void): void {
+    this.eventEmitter.on('template_deleted', callback);
+  }
+
+  public onError(callback: (error: any) => void): void {
+    this.eventEmitter.on('error', callback);
+  }
+
+  public offTemplatesUpdated(callback: (templates: SQLTemplate[]) => void): void {
+    this.eventEmitter.off('templates_updated', callback);
+  }
+
+  public offTemplateCreated(callback: (template: SQLTemplate) => void): void {
+    this.eventEmitter.off('template_created', callback);
+  }
+
+  public offTemplateUpdated(callback: (template: SQLTemplate) => void): void {
+    this.eventEmitter.off('template_updated', callback);
+  }
+
+  public offTemplateDeleted(callback: (id: number) => void): void {
+    this.eventEmitter.off('template_deleted', callback);
+  }
+
+  public offError(callback: (error: any) => void): void {
+    this.eventEmitter.off('error', callback);
+  }
+}
+
+export const templateService = TemplateService.getInstance(); 
+
+
+
+// Relative Path: src\services\websocket.service.ts
+
+// Custom EventEmitter implementation for browser
+class CustomEventEmitter {
+  private listeners: {
+    'live_update': ((data: LiveUpdate) => void)[];
+    'connected': (() => void)[];
+    'disconnected': (() => void)[];
+    'error': ((error: Error) => void)[];
+  } = {
+    'live_update': [],
+    'connected': [],
+    'disconnected': [],
+    'error': []
+  };
+
+  on(event: 'live_update', callback: (data: LiveUpdate) => void): void;
+  on(event: 'connected' | 'disconnected', callback: () => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  on(event: string, callback: Function): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event].push(callback);
+    }
+  }
+
+  off(event: 'live_update', callback: (data: LiveUpdate) => void): void;
+  off(event: 'connected' | 'disconnected', callback: () => void): void;
+  off(event: 'error', callback: (error: Error) => void): void;
+  off(event: string, callback: Function): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event] = (this.listeners as any)[event].filter((cb: Function) => cb !== callback);
+    }
+  }
+
+  emit(event: 'live_update', data: LiveUpdate): void;
+  emit(event: 'connected' | 'disconnected'): void;
+  emit(event: 'error', error: Error): void;
+  emit(event: string, data?: any): void {
+    if (event in this.listeners) {
+      (this.listeners as any)[event].forEach((callback: Function) => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in event listener for ${event}:`, error);
+        }
+      });
+    }
+  }
+}
+
+// Environment variables type definition
+interface ImportMetaEnv {
+  readonly VITE_WS_URL: string;
+  readonly VITE_WS_FALLBACK_URL?: string;
+}
+
+// Augment the ImportMeta interface
+declare global {
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+}
+
+export interface LiveUpdate {
+  template_id: number;
+  template_info?: {
+    name: string;
+    description?: string;
+    refresh_rate: number;
+  };
+  data: {
+    sql_query: string;
+    result: any[];
+    answer: string;
+  };
+  error?: string;
+  timestamp: string;
+}
+
+// Message type definitions
+export type MessageType = 'ping' | 'pong' | 'get_results' | 'live_update';
+
+interface BaseWebSocketMessage {
+  type: MessageType;
+}
+
+interface PingMessage extends BaseWebSocketMessage {
+  type: 'ping';
+  timestamp: number;
+}
+
+interface PongMessage extends BaseWebSocketMessage {
+  type: 'pong';
+  timestamp: number;
+}
+
+interface GetResultsMessage extends BaseWebSocketMessage {
+  type: 'get_results';
+  query: string;
+}
+
+interface LiveUpdateMessage extends BaseWebSocketMessage {
+  type: 'live_update';
+  data: LiveUpdate;
+}
+
+type WebSocketMessage = PingMessage | PongMessage | GetResultsMessage | LiveUpdateMessage;
+
+// WebSocket service class
+export class WebSocketService {
+  private static instance: WebSocketService;
+  private socket: WebSocket | null = null;
+  private eventEmitter = new CustomEventEmitter();
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 10;
+  private readonly reconnectDelay = 2000;
+  private heartbeatInterval: number | null = null;
+  private lastPongTime: number = Date.now();
+  private readonly maxMissedPongs = 5;
+  private missedPongs = 0;
+  private connectionCount = 0; // Track number of components using the connection
+
+  private constructor() {
+    // Private constructor for singleton
+  }
+
+  public static getInstance(): WebSocketService {
+    if (!WebSocketService.instance) {
+      WebSocketService.instance = new WebSocketService();
+    }
+    return WebSocketService.instance;
+  }
+
+  public connect(url?: string): void {
+    this.connectionCount++;
+    
+    // If we already have an open connection, just return
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    // If we have a connection in progress, wait for it
+    if (this.socket?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
+    const wsUrl = url || import.meta.env.VITE_WS_URL || 'ws://localhost:9000/api/live';
+    if (!wsUrl) {
+      this.emitError(new Error('No WebSocket URL provided'));
+      return;
+    }
+
+    try {
+      this.socket = new WebSocket(wsUrl);
+      this.setupEventListeners();
+    } catch (error) {
+      this.emitError(error instanceof Error ? error : new Error('Failed to create WebSocket connection'));
+    }
+  }
+
+  private setupEventListeners(): void {
+    if (!this.socket) return;
+
+    this.socket.onopen = () => {
+      console.log('WebSocket connection established');
+      this.reconnectAttempts = 0;
+      this.missedPongs = 0;
+      this.eventEmitter.emit('connected');
+      this.startHeartbeat();
+    };
+
+    this.socket.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.code, event.reason);
+      this.eventEmitter.emit('disconnected');
+      this.stopHeartbeat();
+      this.attemptReconnect();
+    };
+
+    this.socket.onerror = (event) => {
+      console.error('WebSocket error:', event);
+      this.emitError(new Error('WebSocket error occurred'));
+    };
+
+    this.socket.onmessage = (event) => {
+      try {
+        console.log('Received WebSocket message:', event.data);
+        const message = JSON.parse(event.data) as WebSocketMessage;
+        this.handleMessage(message);
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+        this.emitError(new Error('Invalid message format'));
+      }
+    };
+  }
+
+  private handleMessage(message: WebSocketMessage): void {
+    console.log('Handling WebSocket message:', message);
+    switch (message.type) {
+      case 'pong':
+        console.log('Received pong message');
+        this.handlePong(message);
+        break;
+      case 'live_update':
+        console.log('Received live update:', message.data);
+        this.eventEmitter.emit('live_update', message.data);
+        break;
+      default:
+        console.log('Received unknown message type:', message.type);
+        break;
+    }
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = window.setInterval(() => {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.sendMessage({
+          type: 'ping',
+          timestamp: Date.now()
+        });
+        
+        // Check if we've missed too many pongs
+        const now = Date.now();
+        if (now - this.lastPongTime > 120000) { // Increased from 90 seconds to 120 seconds
+          this.missedPongs++;
+          if (this.missedPongs >= this.maxMissedPongs) {
+            console.warn('Too many missed pongs, reconnecting...');
+            this.disconnect();
+            this.connect(); // Reconnect if we've missed too many pongs
+          }
+        }
+      }
+    }, 45000); // Increased from 30000 to 45000
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval !== null) {
+      window.clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private handlePong(message: PongMessage): void {
+    this.lastPongTime = Date.now();
+    this.missedPongs = 0;
+  }
+
+  private attemptReconnect(): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.emitError(new Error('Max reconnection attempts reached'));
+      return;
+    }
+
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
+    window.setTimeout(() => {
+      this.reconnectAttempts++;
+      this.connect();
+    }, delay);
+  }
+
+  public disconnect(): void {
+    this.connectionCount--;
+    
+    // Only disconnect if no components are using the connection
+    if (this.connectionCount <= 0) {
+      if (this.socket) {
+        this.socket.close();
+        this.socket = null;
+      }
+      this.stopHeartbeat();
+      this.connectionCount = 0; // Ensure we don't go negative
+    }
+  }
+
+  public sendMessage(message: WebSocketMessage): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.error('Cannot send message - WebSocket not connected');
+      this.emitError(new Error('WebSocket is not connected'));
+      return;
+    }
+
+    try {
+      const messageStr = JSON.stringify(message);
+      console.log('Sending WebSocket message:', messageStr);
+      this.socket.send(messageStr);
+    } catch (error) {
+      console.error('Error sending WebSocket message:', error);
+      this.emitError(error instanceof Error ? error : new Error('Failed to send message'));
+    }
+  }
+
+  private emitError(error: Error): void {
+    this.eventEmitter.emit('error', error);
+  }
+
+  // Convenience methods for live updates
+  public onLiveUpdate(callback: (update: LiveUpdate) => void): void {
+    this.eventEmitter.on('live_update', callback);
+  }
+
+  public offLiveUpdate(callback: (update: LiveUpdate) => void): void {
+    this.eventEmitter.off('live_update', callback);
+  }
+}
+
+export const websocketService = WebSocketService.getInstance(); 
+
+
+
+// Relative Path: src\types\babel__standalone.d.ts
+
+declare module '@babel/standalone' {
+  export interface TransformResult {
+    code: string;
+    map: any;
+    ast: any;
+  }
+
+  export interface TransformOptions {
+    filename?: string;
+    presets?: string[];
+    plugins?: string[];
+    configFile?: boolean;
+    babelrc?: boolean;
+  }
+
+  export function transform(code: string, options?: TransformOptions): TransformResult;
+  
+  export const availablePresets: {
+    [key: string]: any;
+  };
+} 
+
+
+
+// Relative Path: src\types\lucide-react.d.ts
+
+declare module 'lucide-react' {
+  import * as React from 'react';
+
+  export interface IconProps extends React.SVGProps<SVGSVGElement> {
+    size?: number | string;
+    color?: string;
+    strokeWidth?: number | string;
+  }
+
+  export const Sun: React.FC<IconProps>;
+  export const Moon: React.FC<IconProps>;
+  export const Paperclip: React.FC<IconProps>;
+  export const Mic: React.FC<IconProps>;
+  export const Send: React.FC<IconProps>;
+} 
+
+
+
+// Relative Path: src\types\recharts.d.ts
+
+declare module 'recharts' {
+  import * as React from 'react';
+
+  export interface ResponsiveContainerProps {
+    width?: number | string;
+    height?: number | string;
+    aspect?: number;
+    minHeight?: number;
+    children: React.ReactNode;
+  }
+
+  export interface LineChartProps {
+    data?: any[];
+    margin?: {
+      top?: number;
+      right?: number;
+      bottom?: number;
+      left?: number;
+    };
+    children: React.ReactNode;
+  }
+
+  export interface LineProps {
+    type?: 'monotone' | 'linear' | 'step' | 'stepBefore' | 'stepAfter';
+    dataKey: string;
+    stroke?: string;
+    strokeWidth?: number;
+    dot?: any;
+    activeDot?: any;
+  }
+
+  export interface XAxisProps {
+    dataKey?: string;
+    stroke?: string;
+    tick?: any;
+    tickLine?: any;
+  }
+
+  export interface YAxisProps {
+    stroke?: string;
+    tick?: any;
+    tickLine?: any;
+    tickFormatter?: (value: any) => string;
+  }
+
+  export interface CartesianGridProps {
+    strokeDasharray?: string;
+    stroke?: string;
+    opacity?: number;
+  }
+
+  export interface TooltipProps {
+    content?: React.ComponentType<any>;
+  }
+
+  export const ResponsiveContainer: React.FC<ResponsiveContainerProps>;
+  export const LineChart: React.FC<LineChartProps>;
+  export const Line: React.FC<LineProps>;
+  export const XAxis: React.FC<XAxisProps>;
+  export const YAxis: React.FC<YAxisProps>;
+  export const CartesianGrid: React.FC<CartesianGridProps>;
+  export const Tooltip: React.FC<TooltipProps>;
+} 
+
+
+
+// Relative Path: src\App.tsx
+
+import { ThemeProvider } from './context/ThemeContext'
+import { Header } from './components/layout/Header'
+import { ChatInterface } from './components/layout/ChatInterface'
+import { LiveTileGrid } from './components/live/LiveTileGrid'
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <div className="flex flex-col min-h-screen bg-light-background dark:bg-dark-background">
+        <Header />
+        <main className="flex-1 pt-16">
+          <div className="flex h-full">
+            <div className="flex-1 overflow-auto p-4">
+              <h2 className="text-2xl font-bold mb-4 text-light-text dark:text-dark-text">
+                Dashboard
+              </h2>
+              <LiveTileGrid />
+            </div>
+          </div>
+          <ChatInterface />
+        </main>
+      </div>
+    </ThemeProvider>
+  )
+} 
+
+
+
+// Relative Path: src\main.tsx
+
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+) 
+
+
+
+// Relative Path: vite.config.ts
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
+}) 
+
+
+
