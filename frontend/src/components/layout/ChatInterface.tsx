@@ -6,6 +6,12 @@ import * as Babel from '@babel/standalone'
 import React from 'react'
 import { queryText2Sql, QueryResponse } from '../../services/api'
 import { SaveTemplateButton } from '../SaveTemplateButton'
+import { LineChartWidget } from '../live/widgets/LineChartWidget'
+import { BarChartWidget } from '../live/widgets/BarChartWidget'
+import { PieChartWidget } from '../live/widgets/PieChartWidget'
+import { TableWidget } from '../live/widgets/TableWidget'
+import { TextWidget } from '../live/widgets/TextWidget'
+import { NumberWidget } from '../live/widgets/NumberWidget'
 
 interface Message {
   id: string
@@ -46,7 +52,7 @@ export function ChatInterface() {
       const sqlResponse = await queryText2Sql({ question: inputValue })
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Hier ist das Ergebnis deiner Anfrage:',
+        text: sqlResponse.presentation || 'Hier ist das Ergebnis deiner Anfrage:',
         timestamp: new Date().toLocaleTimeString('de-DE', {
           hour: '2-digit',
           minute: '2-digit',
@@ -208,6 +214,65 @@ export function ChatInterface() {
     );
   };
 
+  const widgetRegistry: Record<string, React.FC<{ data: any }>> = {
+    LineChart: LineChartWidget,
+    BarChart: BarChartWidget,
+    PieChart: PieChartWidget,
+    Table: TableWidget,
+    Text: TextWidget,
+    Number: NumberWidget,
+  }
+
+  const renderMessageBody = (message: Message) => {
+    const lines = (message.text || '').split('\n')
+    const nodes: React.ReactNode[] = []
+    let buffer: string[] = []
+
+    const flushText = () => {
+      if (buffer.length) {
+        nodes.push(
+          <div key={`t-${nodes.length}`} className="whitespace-pre-wrap">
+            {buffer.join('\n')}
+          </div>
+        )
+        buffer = []
+      }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const match = line.match(/^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/)
+      if (match) {
+        flushText()
+        const name = match[1]
+        const Comp = widgetRegistry[name]
+        let data: any = null
+
+        if (match[2]) {
+          try {
+            const payload = JSON.parse(match[2])
+            data = (payload as any)?.data ?? payload
+          } catch {
+          }
+        }
+
+        if (data == null && message.sqlResponse?.result) {
+          data = message.sqlResponse.result
+        }
+
+        nodes.push(
+          Comp
+            ? <Comp key={`w-${nodes.length}`} data={data} />
+            : <div key={`w-${nodes.length}`} className="text-amber-500">Unbekanntes Widget: {name}</div>
+        )
+        continue
+      }
+      buffer.push(line)
+    }
+    flushText()
+    return <>{nodes}</>
+  }
+
   return (
     <>
       {/* Backdrop when chat is open */}
@@ -255,7 +320,7 @@ export function ChatInterface() {
                         <span className="text-light-text-secondary dark:text-dark-text-secondary">Assistant</span>
                       </div>
                       <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
-                        <div className="text-light-text dark:text-dark-text">{message.text}</div>
+                        <div className="text-light-text dark:text-dark-text">{renderMessageBody(message)}</div>
                         {message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
                         {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
                         <div className="text-sm text-light-primary dark:text-dark-primary text-right">

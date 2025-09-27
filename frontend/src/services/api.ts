@@ -7,6 +7,7 @@ export interface QueryResponse {
   sql: string;
   result: any;
   formatted_result: string;
+  presentation?: string;
 }
 
 export interface QueryRequest {
