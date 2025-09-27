@@ -10,8 +10,11 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     
     # Database paths
-    FINANCE_DB_PATH: Path = DATA_DIR / "finance.db"
+    # Use the requested finance test database under ./db
+    FINANCE_DB_PATH: Path = BASE_DIR / "db" / "finance_test.db"
     TEMPLATES_DB_PATH: Path = DATA_DIR / "templates.db"
+    # Provide compatibility with .env DATABASE_PATH and existing usage
+    DATABASE_PATH: Path = FINANCE_DB_PATH
     
     # API settings
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
