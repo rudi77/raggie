@@ -7,8 +7,8 @@ import { EventEmitter } from './events';
 //   }
 // }
 
-const API_URL = (import.meta.env as any).VITE_API_URL || 'http://localhost:9001';
-const BASE_URL = API_URL;
+// Use relative URL so Vite dev proxy can route to backend
+const BASE_URL = '/api';
 
 export enum WidgetType {
   TABLE = 'TABLE',
@@ -71,7 +71,7 @@ class TemplateService {
     
     try {
       this.isLoading = true;
-      const response = await fetch(`${BASE_URL}/api/templates/`);
+      const response = await fetch(`${BASE_URL}/templates`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -94,7 +94,7 @@ class TemplateService {
 
   public async createTemplate(template: TemplateCreate): Promise<SQLTemplate> {
     try {
-      const response = await fetch(`${BASE_URL}/api/templates/`, {
+      const response = await fetch(`${BASE_URL}/templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -119,7 +119,7 @@ class TemplateService {
 
   public async updateTemplate(id: number, template: Partial<TemplateCreate>): Promise<SQLTemplate> {
     try {
-      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
+      const response = await fetch(`${BASE_URL}/templates/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -144,7 +144,7 @@ class TemplateService {
 
   public async deleteTemplate(id: number): Promise<void> {
     try {
-      const response = await fetch(`${BASE_URL}/api/templates/${id}`, {
+      const response = await fetch(`${BASE_URL}/templates/${id}`, {
         method: 'DELETE',
       });
 

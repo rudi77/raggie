@@ -1,6 +1,7 @@
 // API service for handling backend requests
 
-const API_BASE_URL = 'http://localhost:9001';
+// Use relative URL so Vite dev proxy can route to backend
+const API_BASE_URL = '/text2sql';
 
 export interface QueryResponse {
   sql: string;
@@ -16,7 +17,7 @@ export interface QueryRequest {
  * Sends a question to the text2sql API and returns the response
  */
 export async function queryText2Sql(request: QueryRequest): Promise<QueryResponse> {
-  const response = await fetch(`${API_BASE_URL}/text2sql/query`, {
+  const response = await fetch(`${API_BASE_URL}/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -36,7 +37,7 @@ export async function queryText2Sql(request: QueryRequest): Promise<QueryRespons
  * Gets an explanation of the SQL that would be generated for a question
  */
 export async function explainText2Sql(request: QueryRequest): Promise<{ sql: string }> {
-  const response = await fetch(`${API_BASE_URL}/text2sql/explain`, {
+  const response = await fetch(`${API_BASE_URL}/explain`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

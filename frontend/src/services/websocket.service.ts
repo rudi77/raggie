@@ -142,7 +142,9 @@ export class WebSocketService {
       return;
     }
 
-    const wsUrl = url || import.meta.env.VITE_WS_URL || 'ws://localhost:9000/api/live';
+    // Use current location to build relative WS URL so Vite proxy is used in dev
+    const defaultWs = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live`;
+    const wsUrl = url || import.meta.env.VITE_WS_URL || defaultWs;
     if (!wsUrl) {
       this.emitError(new Error('No WebSocket URL provided'));
       return;
