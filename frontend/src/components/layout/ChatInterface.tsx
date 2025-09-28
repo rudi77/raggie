@@ -22,7 +22,11 @@ interface Message {
   sqlResponse?: QueryResponse
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  centered?: boolean
+}
+
+export function ChatInterface({ centered = false }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
@@ -285,16 +289,17 @@ export function ChatInterface() {
 
   return (
     <>
-      {/* Backdrop when chat is open */}
-      {!isCollapsed && (
+      {/* Backdrop when chat is open (only for drawer mode) */}
+      {!centered && !isCollapsed && (
         <div 
           className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40"
           onClick={() => setIsCollapsed(true)}
         />
       )}
       
-      <div className={`fixed left-0 top-16 bottom-0 flex z-50 transition-all duration-300 ease-in-out ${isCollapsed ? 'w-12' : 'w-[600px]'}`}>
+      <div className={`${centered ? 'relative left-auto top-auto bottom-auto h-[calc(100vh-4rem)]' : 'fixed left-0 top-16 bottom-0'} flex z-50 transition-all duration-300 ease-in-out ${centered ? 'w-full' : (isCollapsed ? 'w-12' : 'w-[600px]')}`}>
         {/* Toggle Button */}
+        {!centered && (
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="w-12 flex items-center justify-center bg-light-background-light dark:bg-dark-background-light border-r border-light-border dark:border-dark-border hover:bg-light-background-lighter dark:hover:bg-dark-background-lighter transition-colors"
@@ -303,9 +308,10 @@ export function ChatInterface() {
             {isCollapsed ? '→' : '←'}
           </span>
         </button>
+        )}
 
         {/* Main Chat Container */}
-        <div className={`flex flex-col flex-1 bg-light-background dark:bg-dark-background border-r border-light-border dark:border-dark-border shadow-lg ${isCollapsed ? 'hidden' : ''}`}>
+        <div className={`flex flex-col flex-1 bg-light-background dark:bg-dark-background ${centered ? 'border border-light-border dark:border-dark-border rounded-lg' : 'border-r border-light-border dark:border-dark-border'} shadow-lg ${!centered && isCollapsed ? 'hidden' : ''}`}>
           <div className="flex-1 overflow-y-auto">
             <div className="w-full min-h-full py-6 px-4">
               {messages.map(message => (
