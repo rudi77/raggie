@@ -8,8 +8,21 @@ from ...core.config import settings
 from ...services.text2sql_service import Text2SQLService
 from llama_index.llms.openai import OpenAI
 import asyncio
+from asyncio import TimeoutError, wait_for
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# Reusable Text2SQLService singleton for this module
+_t2s_singleton: Optional[Text2SQLService] = None
+
+async def _get_t2s() -> Text2SQLService:
+    global _t2s_singleton
+    if _t2s_singleton is None:
+        _t2s_singleton = Text2SQLService(db_path=settings.FINANCE_DB_PATH)
+        await _t2s_singleton.initialize()
+    elif not getattr(_t2s_singleton, "_initialized", False):
+        await _t2s_singleton.initialize()
+    return _t2s_singleton
 
 
 @router.post("/conversations", response_model=dict)
@@ -103,10 +116,11 @@ Gib eine JSON-Antwort zurück, exakt dieses Schema und nichts anderes:
 
 Verlauf:\n{history_text}\n\nFrage: {question}
 """
-        if hasattr(llm, "acomplete"):
-            resp = await llm.acomplete(prompt)
-        else:
-            resp = await asyncio.to_thread(llm.complete, prompt)
+        async def _run():
+            if hasattr(llm, "acomplete"):
+                return await llm.acomplete(prompt)
+            return await asyncio.to_thread(llm.complete, prompt)
+        resp = await wait_for(_run(), timeout=8)
         text = getattr(resp, "text", str(resp)).strip()
         # Try to parse JSON
         import json as _json
@@ -132,10 +146,15 @@ VERLAUF:\n{history_text}
 
 AKTUELLE FRAGE: {question}
 """
-    if hasattr(llm, "acomplete"):
-        resp = await llm.acomplete(prompt)
-    else:
-        resp = await asyncio.to_thread(llm.complete, prompt)
+    async def _run():
+        if hasattr(llm, "acomplete"):
+            return await llm.acomplete(prompt)
+        return await asyncio.to_thread(llm.complete, prompt)
+    try:
+        resp = await wait_for(_run(), timeout=18)
+    except TimeoutError:
+        # Fallback minimal markdown answer if LLM times out
+        return {"answer": "Die Anfrage wurde bearbeitet, aber die Antwort hat zu lange gedauert.", "presentation": "Die Anfrage wurde bearbeitet, aber die Antwort hat zu lange gedauert."}
     answer = getattr(resp, "text", str(resp)).strip()
     return {
         "answer": answer,
@@ -172,13 +191,16 @@ async def route_message(payload: Dict[str, Any], db: AsyncSession = Depends(get_
         for r in history_rows[-20:]
     ]
 
-    # Initialize services
-    t2s = Text2SQLService(db_path=settings.FINANCE_DB_PATH)
-    await t2s.initialize()
+    # Initialize services (reused)
+    t2s = await _get_t2s()
     llm = t2s.llm or OpenAI(api_key=settings.OPENAI_API_KEY, model="gpt-4o-mini")
 
     # Decide
-    decision = await _classify_intent(llm, history, message)
+    # Classify with timeout and safe fallback
+    try:
+        decision = await _classify_intent(llm, history, message)
+    except TimeoutError:
+        decision = {"route": "text2sql", "confidence": 0.5}
     route = decision.get("route", "llm")
     confidence = float(decision.get("confidence", 0.5))
     threshold = 0.6
