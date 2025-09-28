@@ -13,7 +13,7 @@ from backend.core.database import templates_engine, Base, create_tables
 from backend.services.text2sql_service import Text2SQLService
 from backend.services.scheduler_service import SchedulerService
 from backend.services.websocket_manager import websocket_manager
-from backend.api.routes import templates, websocket, text2sql
+from backend.api.routes import templates, websocket, text2sql, chat
 
 # Configure logging with more detail
 logging.basicConfig(
@@ -64,6 +64,7 @@ app.add_middleware(
 app.include_router(templates.router)  # Already has prefix in router definition
 app.include_router(websocket.router)  # Already has prefix in router definition
 app.include_router(text2sql.router)  # Already has prefix in router definition
+app.include_router(chat.router)  # Chat persistence
 
 # Initialize services
 text2sql_service = Text2SQLService(settings.FINANCE_DB_PATH)
