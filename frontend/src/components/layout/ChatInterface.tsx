@@ -331,7 +331,24 @@ export function ChatInterface() {
                       </div>
                       <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
                         <div className="text-light-text dark:text-dark-text">{renderMessageBody(message)}</div>
-                        {!containsWidgetDirective(message.text) && message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
+                        {message.sqlResponse && (
+                          <>
+                            {containsWidgetDirective(message.text)
+                              ? (
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Generated SQL:</h4>
+                                    <SaveTemplateButton query={message.sqlResponse.sql} sourceQuestion={message.text} />
+                                  </div>
+                                  <pre className="p-3 bg-light-background dark:bg-dark-background rounded-md text-light-text dark:text-dark-text text-sm overflow-x-auto">
+                                    <code>{message.sqlResponse.sql}</code>
+                                  </pre>
+                                </div>
+                              ) : (
+                                renderSqlResponse(message.sqlResponse, message.text)
+                              )}
+                          </>
+                        )}
                         {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
                         <div className="text-sm text-light-primary dark:text-dark-primary text-right">
                           {message.timestamp}
