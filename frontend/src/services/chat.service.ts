@@ -54,4 +54,16 @@ export async function routeChat(conversationId: number, message: string): Promis
   return res.json();
 }
 
+export interface ConversationSummary {
+  id: number;
+  title: string | null;
+  created_at: string;
+}
+
+export async function listConversations(): Promise<ConversationSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/conversations`);
+  if (!res.ok) throw new Error('Failed to load conversations');
+  return res.json();
+}
+
 

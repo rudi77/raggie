@@ -25,21 +25,53 @@ interface Message {
 
 interface ChatInterfaceProps {
   centered?: boolean
+  conversationId?: number | null
 }
 
-export function ChatInterface({ centered = false }: ChatInterfaceProps) {
+export function ChatInterface({ centered = false, conversationId: externalConversationId = null }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [DynamicComponent, setDynamicComponent] = useState<React.FC | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [conversationId, setConversationId] = useState<number | null>(null)
+  const [internalConversationId, setInternalConversationId] = useState<number | null>(null)
   const mountedRef = useRef(false)
 
-  // Initialize conversation and load history once
+  const effectiveConversationId = externalConversationId ?? internalConversationId
+
+  // Load messages when effective conversation changes
+  useEffect(() => {
+    const cid = externalConversationId
+    if (cid && !Number.isNaN(cid)) {
+      setInternalConversationId(cid)
+      listMessages(cid)
+        .then(persisted => {
+          setMessages(persisted.map(m => ({
+            id: String(m.id),
+            text: m.text,
+            timestamp: new Date(m.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            isUser: m.role === 'user',
+            sqlResponse: m.meta?.sql ? {
+              sql: m.meta.sql || '',
+              result: m.meta.result ?? null,
+              formatted_result: m.meta.formatted_result || '',
+              presentation: m.meta.presentation,
+            } : undefined,
+          })))
+        })
+        .catch(e => console.error('Failed to load messages for conversation', cid, e))
+    }
+  }, [externalConversationId])
+
+  // Initialize conversation and load history once (fallback when no external id)
   useEffect(() => {
     if (mountedRef.current) return
     mountedRef.current = true
+
+    if (externalConversationId && !Number.isNaN(externalConversationId)) {
+      // Already handled by the effect above
+      return
+    }
 
     const init = async () => {
       try {
@@ -53,8 +85,7 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
           cid = created.id
           localStorage.setItem('chat.conversationId', String(cid))
         }
-        setConversationId(cid)
-        // Load persisted messages
+        setInternalConversationId(cid)
         const persisted = await listMessages(cid)
         setMessages(persisted.map(m => ({
           id: String(m.id),
@@ -73,12 +104,12 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
       }
     }
     init()
-  }, [])
+  }, [externalConversationId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputValue.trim()) return
-    if (!conversationId) return
+    if (!effectiveConversationId) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -92,13 +123,11 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
     }
 
     setMessages(prev => [...prev, userMessage])
-    // Persist user message
-    appendMessage(conversationId, { role: 'user', text: inputValue }).catch(err => console.error('Failed to save user message', err))
+    appendMessage(effectiveConversationId, { role: 'user', text: inputValue }).catch(err => console.error('Failed to save user message', err))
     setLoading(true)
 
     try {
-      // Route via backend (intent: text2sql | llm)
-      const routed = await routeChat(conversationId, inputValue)
+      const routed = await routeChat(effectiveConversationId, inputValue)
       const sqlResponse: QueryResponse = {
         sql: routed.sql || '',
         result: routed.result,
@@ -118,7 +147,6 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
       }
       setMessages(prev => [...prev, botResponse])
     } catch (err) {
-      // If SQL query fails, try revenue visualization
       const isRevenueQuery =
         inputValue.toLowerCase().includes('umsatz') ||
         inputValue.toLowerCase().includes('revenue') ||
@@ -166,8 +194,8 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
               }
 
               setMessages(prev => [...prev, botResponse])
-              if (conversationId) {
-                appendMessage(conversationId, { role: 'assistant', text: botResponse.text }).catch(err => console.error('Failed to save assistant message', err))
+              if (effectiveConversationId) {
+                appendMessage(effectiveConversationId, { role: 'assistant', text: botResponse.text }).catch(err => console.error('Failed to save assistant message', err))
               }
             } catch (error) {
               console.error('Error executing code:', error);
@@ -182,8 +210,8 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
                 isUser: false,
               }
               setMessages(prev => [...prev, errorResponse])
-              if (conversationId) {
-                appendMessage(conversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
+              if (effectiveConversationId) {
+                appendMessage(effectiveConversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
               }
             }
           })
@@ -200,8 +228,8 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
               isUser: false,
             }
             setMessages(prev => [...prev, errorResponse])
-            if (conversationId) {
-              appendMessage(conversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
+            if (effectiveConversationId) {
+              appendMessage(effectiveConversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
             }
           })
       } else {
@@ -216,8 +244,8 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
           isUser: false,
         }
         setMessages(prev => [...prev, errorResponse])
-        if (conversationId) {
-          appendMessage(conversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
+        if (effectiveConversationId) {
+          appendMessage(effectiveConversationId, { role: 'assistant', text: errorResponse.text }).catch(err => console.error('Failed to save assistant message', err))
         }
       }
     } finally {
@@ -308,8 +336,7 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      // Trim and strip surrounding single/double quotes to be robust against LLM formatting
-      const sanitized = line.trim().replace(/^['"]|['"]$/g, '')
+      const sanitized = line.trim().replace(/^[\'"]|[\'"]$/g, '')
       const match = sanitized.match(/^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/)
       if (match) {
         flushText()
@@ -345,7 +372,7 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
   const containsWidgetDirective = (text: string | undefined) => {
     if (!text) return false
     return text.split('\n').some(raw => {
-      const s = raw.trim().replace(/^['"]|['"]$/g, '')
+      const s = raw.trim().replace(/^[\'"]|[\'"]$/g, '')
       return /^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/.test(s)
     })
   }
