@@ -99,7 +99,7 @@ export const LineChartWidget: React.FC<LineChartWidgetProps> = ({ data }) => {
         outline: 'none'
       }
     }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={320}>
         <LineChart
           data={chartData}
           margin={{

@@ -241,7 +241,9 @@ export function ChatInterface() {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      const match = line.match(/^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/)
+      // Trim and strip surrounding single/double quotes to be robust against LLM formatting
+      const sanitized = line.trim().replace(/^['"]|['"]$/g, '')
+      const match = sanitized.match(/^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/)
       if (match) {
         flushText()
         const name = match[1]
@@ -271,6 +273,14 @@ export function ChatInterface() {
     }
     flushText()
     return <>{nodes}</>
+  }
+
+  const containsWidgetDirective = (text: string | undefined) => {
+    if (!text) return false
+    return text.split('\n').some(raw => {
+      const s = raw.trim().replace(/^['"]|['"]$/g, '')
+      return /^@widgets\/([A-Za-z0-9_]+)\s*(\{[\s\S]*\})?$/.test(s)
+    })
   }
 
   return (
@@ -321,7 +331,7 @@ export function ChatInterface() {
                       </div>
                       <div className="bg-light-background-light dark:bg-dark-background-light rounded-xl p-6 space-y-4">
                         <div className="text-light-text dark:text-dark-text">{renderMessageBody(message)}</div>
-                        {message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
+                        {!containsWidgetDirective(message.text) && message.sqlResponse && renderSqlResponse(message.sqlResponse, message.text)}
                         {message.showDynamicComponent && DynamicComponent && <DynamicComponent />}
                         <div className="text-sm text-light-primary dark:text-dark-primary text-right">
                           {message.timestamp}

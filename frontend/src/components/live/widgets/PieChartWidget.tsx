@@ -65,7 +65,7 @@ export const PieChartWidget: React.FC<PieChartWidgetProps> = ({ data }) => {
 
   return (
     <Box sx={{ width: '100%', height: '100%', minHeight: 300 }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
             data={chartData}

@@ -37,9 +37,10 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ data }) => {
   return (
     <Box sx={{
       width: '100%',
-      height: '100%',
+      height: 'auto',
       maxWidth: '500px', // Match the LineChart width
       margin: '0 auto', // Center the table
+      minHeight: 200,
     }}>
       <TableContainer 
         component={Paper} 
