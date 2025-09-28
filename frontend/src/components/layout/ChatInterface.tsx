@@ -4,7 +4,7 @@ import { Paperclip, Mic, Send } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import * as Babel from '@babel/standalone'
 import React from 'react'
-import { queryText2Sql, QueryResponse } from '../../services/api'
+import { QueryResponse } from '../../services/api'
 import { SaveTemplateButton } from '../SaveTemplateButton'
 import { LineChartWidget } from '../live/widgets/LineChartWidget'
 import { BarChartWidget } from '../live/widgets/BarChartWidget'
@@ -12,7 +12,7 @@ import { PieChartWidget } from '../live/widgets/PieChartWidget'
 import { TableWidget } from '../live/widgets/TableWidget'
 import { TextWidget } from '../live/widgets/TextWidget'
 import { NumberWidget } from '../live/widgets/NumberWidget'
-import { createConversation, listMessages, appendMessage } from '../../services/chat.service'
+import { createConversation, listMessages, appendMessage, routeChat } from '../../services/chat.service'
 
 interface Message {
   id: string
@@ -97,11 +97,17 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
     setLoading(true)
 
     try {
-      // Try to process as SQL query first
-      const sqlResponse = await queryText2Sql({ question: inputValue })
+      // Route via backend (intent: text2sql | llm)
+      const routed = await routeChat(conversationId, inputValue)
+      const sqlResponse: QueryResponse = {
+        sql: routed.sql || '',
+        result: routed.result,
+        formatted_result: routed.formatted_result || '',
+        presentation: routed.presentation
+      }
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: sqlResponse.presentation || 'Hier ist das Ergebnis deiner Anfrage:',
+        text: sqlResponse.presentation || routed.answer || 'Hier ist das Ergebnis deiner Anfrage:',
         timestamp: new Date().toLocaleTimeString('de-DE', {
           hour: '2-digit',
           minute: '2-digit',
@@ -111,8 +117,6 @@ export function ChatInterface({ centered = false }: ChatInterfaceProps) {
         sqlResponse
       }
       setMessages(prev => [...prev, botResponse])
-      // Persist assistant message with meta
-      appendMessage(conversationId, { role: 'assistant', text: botResponse.text, meta: sqlResponse }).catch(err => console.error('Failed to save assistant message', err))
     } catch (err) {
       // If SQL query fails, try revenue visualization
       const isRevenueQuery =

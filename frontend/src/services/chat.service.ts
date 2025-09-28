@@ -35,4 +35,23 @@ export async function appendMessage(conversationId: number, payload: ChatMessage
   return res.json();
 }
 
+export interface RoutedResponse {
+  route: 'text2sql' | 'llm';
+  answer?: string;
+  sql?: string;
+  result?: any;
+  formatted_result?: string;
+  presentation?: string;
+}
+
+export async function routeChat(conversationId: number, message: string): Promise<RoutedResponse> {
+  const res = await fetch(`${API_BASE_URL}/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversation_id: conversationId, message })
+  });
+  if (!res.ok) throw new Error('Failed to route chat');
+  return res.json();
+}
+
 
