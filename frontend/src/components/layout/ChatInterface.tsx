@@ -387,7 +387,7 @@ export function ChatInterface({ centered = false, conversationId: externalConver
         />
       )}
       
-      <div className={`${centered ? 'relative left-auto top-auto bottom-auto h-[calc(100vh-4rem)]' : 'fixed left-0 top-16 bottom-0'} flex z-50 transition-all duration-300 ease-in-out ${centered ? 'w-full' : (isCollapsed ? 'w-12' : 'w-[600px]')}`}>
+      <div className={`${centered ? 'relative left-auto top-auto bottom-auto h-[calc(100vh-4rem)] mx-auto' : 'fixed left-0 top-16 bottom-0'} flex z-50 transition-all duration-300 ease-in-out ${centered ? 'w-full' : (isCollapsed ? 'w-12' : 'w-[600px]')}`}>
         {/* Toggle Button */}
         {!centered && (
         <button

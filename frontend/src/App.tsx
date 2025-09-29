@@ -79,7 +79,7 @@ export default function App() {
               {/* Chat Page (keeps mounted) */}
               <div className={`${page === 'chat' ? 'block' : 'hidden'} h-full`}> 
                 <div className="h-full flex items-start justify-center p-4">
-                  <div className="w-full max-w-3xl">
+                  <div className="w-full max-w-4xl mx-auto">
                     <ChatInterface centered={true} conversationId={conversationId} />
                   </div>
                 </div>
